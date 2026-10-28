@@ -11,6 +11,10 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 import java.util.UUID
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 @EnabledIfEnvironmentVariable(named="RUN_DB_TESTS",matches="true")
 class StoreTest {
@@ -33,14 +37,75 @@ class StoreTest {
         store.createSession(first); store.createSession(second)
         val d=Normalize.ingest("demo","","",""); store.replace(first,d)
         assertNotNull(store.dataset(first,d.id)); assertNull(store.dataset(second,d.id))
-        store.saveExchange(first,d.id,"Question","Answer",listOf("R001"),"evidence")
+        val revision=store.conversationRevision(first,d.id)!!
+        assertNull(store.conversationRevision(second,d.id))
+        assertTrue(store.saveExchange(first,d.id,"Question","Answer",listOf("R001"),"evidence",revision))
         assertEquals(2,store.history(first,d.id).size); assertTrue(store.history(second,d.id).isEmpty())
         val next=Normalize.ingest("paste","New entity","Pasted","New review")
         store.replace(first,next)
         assertNull(store.dataset(first,d.id)); assertTrue(store.history(first,d.id).isEmpty())
-        store.saveExchange(first,d.id,"Late question","Late answer",listOf("R001"),"evidence")
+        assertFalse(store.saveExchange(first,d.id,"Late question","Late answer",listOf("R001"),"evidence",revision))
         assertTrue(store.history(first,d.id).isEmpty()); assertEquals(next.id,store.dataset(first)?.id)
         store.clear(first); assertNull(store.dataset(first))
+    }
+    @Test fun `all eleven exchanges survive a new storage connection while model context stays bounded`() {
+        val store=store(); val session=hash(UUID.randomUUID().toString()); store.createSession(session)
+        val data=Normalize.ingest("demo","","",""); store.replace(session,data)
+        val revision=store.conversationRevision(session,data.id)!!
+        for(i in 1..11) assertTrue(store.saveExchange(session,data.id,"Question $i","Answer $i",listOf("R001"),"evidence",revision))
+        val history=store().history(session,data.id)
+        assertEquals(22,history.size)
+        assertEquals((1..11).map { "Question $it" },history.filter { it.role=="user" }.map { it.content })
+        assertEquals((1..11).map { "Answer $it" },history.filter { it.role=="assistant" }.map { it.content })
+        val input=mapper.readTree(Analyst(null).input(data,history,"A new question"))
+        assertEquals(listOf("Question 9","Question 10","Question 11"),input["HISTORY"].map { it["content"].asText() })
+        store.clear(session)
+    }
+    @Test fun `clear chat fences an in flight answer across storage connections and permits new answers`() {
+        val store=store(); val workerStore=store(); val session=hash(UUID.randomUUID().toString()); store.createSession(session)
+        val data=Normalize.ingest("demo","","",""); store.replace(session,data)
+        val ready=CountDownLatch(1); val finish=CountDownLatch(1); val executor=Executors.newSingleThreadExecutor()
+        try {
+            val oldRevision=store.conversationRevision(session,data.id)!!
+            assertTrue(store.saveExchange(session,data.id,"Old question","Old answer",emptyList(),"evidence",oldRevision))
+            val late=executor.submit<Boolean> {
+                val revision=workerStore.conversationRevision(session,data.id)!!
+                ready.countDown(); check(finish.await(5,TimeUnit.SECONDS))
+                workerStore.saveExchange(session,data.id,"Late question","Late answer",emptyList(),"evidence",revision)
+            }
+            assertTrue(ready.await(5,TimeUnit.SECONDS))
+            store.clearChat(session)
+            assertTrue(store.history(session,data.id).isEmpty())
+            finish.countDown()
+            assertFalse(late.get(5,TimeUnit.SECONDS))
+            assertTrue(store.history(session,data.id).isEmpty())
+            val revision=store.conversationRevision(session,data.id)!!
+            assertEquals(oldRevision+1,revision)
+            assertTrue(store.saveExchange(session,data.id,"New question","New answer",emptyList(),"evidence",revision))
+            assertEquals(listOf("New question","New answer"),store.history(session,data.id).map { it.content })
+            store.clearChat(session)
+            assertFalse(store.saveExchange(session,data.id,"Another late question","Late answer",emptyList(),"evidence",revision))
+        } finally { finish.countDown(); executor.shutdownNow(); store.clear(session) }
+    }
+    @Test fun `completed usage refunds excess reservation even when the answer fails evidence validation`() {
+        val store=store(); val scope=scope()
+        // Both providers use this accounting path; a scoped reservation isolates the test's budget.
+        val request=store.reserveExa(scope,"0.01")
+        val fixture=AnalystStreamFixture("Invented: \"words absent from the review\" [R001].")
+        val costs=mutableListOf<Double>()
+        val data=Normalize.ingest("paste","Fixture","Synthetic","Original synthetic evidence")
+        val error=assertThrows(ApiError::class.java) {
+            fixture.analyst.answer(data,emptyList(),"Summarize",AtomicBoolean(false),AtomicReference(),onUsage={ cost ->
+                costs+=cost; store.reconcile(request,cost)
+            }) {}
+        }
+        assertEquals("unverified_quote",error.code)
+        assertEquals(1,costs.size)
+        assertTrue(costs.single()>0 && costs.single()<0.002)
+        assertEquals(costs.single(),usage(scope)!!.second.toDouble(),0.0000005)
+        store.reconcile(request,costs.single())
+        assertEquals(costs.single(),usage(scope)!!.second.toDouble(),0.0000005)
+        assertEquals(1,usage(scope)!!.first,"Failed validation still used one provider call")
     }
     @Test fun `concurrent request permits only one active chat per session`() {
         val store=store(); val session=hash(UUID.randomUUID().toString()); store.createSession(session)

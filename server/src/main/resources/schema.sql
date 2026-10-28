@@ -4,9 +4,10 @@ CREATE TABLE IF NOT EXISTS anonymous_sessions (
 );
 CREATE TABLE IF NOT EXISTS datasets (
  id uuid PRIMARY KEY, session_id text NOT NULL REFERENCES anonymous_sessions(id) ON DELETE CASCADE,
- data jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), expires_at timestamptz NOT NULL DEFAULT now() + interval '24 hours',
+ data jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), expires_at timestamptz NOT NULL DEFAULT now() + interval '24 hours', conversation_revision bigint NOT NULL DEFAULT 0,
  UNIQUE(session_id,id)
 );
+ALTER TABLE datasets ADD COLUMN IF NOT EXISTS conversation_revision bigint NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS datasets_session_idx ON datasets(session_id);
 CREATE TABLE IF NOT EXISTS reviews (
  session_id text NOT NULL, dataset_id uuid NOT NULL, review_id text NOT NULL, text text NOT NULL,
@@ -21,3 +22,4 @@ CREATE INDEX IF NOT EXISTS chat_dataset_idx ON chat_messages(dataset_id,id);
 CREATE TABLE IF NOT EXISTS quota_counters (key text PRIMARY KEY, count integer NOT NULL DEFAULT 0, reserved_usd numeric(12,6) NOT NULL DEFAULT 0, expires_at timestamptz NOT NULL);
 CREATE TABLE IF NOT EXISTS cost_reservations (request_id text PRIMARY KEY, quota_key text NOT NULL REFERENCES quota_counters(key) ON DELETE CASCADE, amount numeric(12,6) NOT NULL, reconciled boolean NOT NULL DEFAULT false);
 INSERT INTO schema_version(version) VALUES(1) ON CONFLICT DO NOTHING;
+INSERT INTO schema_version(version) VALUES(2) ON CONFLICT DO NOTHING;

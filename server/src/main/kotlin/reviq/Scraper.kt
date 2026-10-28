@@ -153,15 +153,20 @@ internal class ReviewScraper(
                 checkActive(deadline,cancelled)
                 if(collection.rows.isEmpty()) throw ApiError(422,"google_play_no_reviews","Google Play returned no written reviews for the English/US selection. Try CSV upload or paste.")
                 val pages=mapOf<String,Any?>("attempted" to 1+collection.batches,"fetched" to 1+collection.batches,"parsed" to 1+collection.batches,
-                    "review_batches" to collection.batches,"requested_reviews" to GooglePlayReviews.TARGET,"batch_size" to GooglePlayReviews.BATCH_SIZE) + if(redirects>0) mapOf("redirects" to redirects) else emptyMap()
+                    "review_batches" to collection.batches,"requested_reviews" to GooglePlayReviews.TARGET,"batch_size" to GooglePlayReviews.BATCH_SIZE,
+                    "review_order" to "newest_first") + if(redirects>0) mapOf("redirects" to redirects) else emptyMap()
                 val completion=when(collection.stoppingReason) {
-                    "google_play_source_exhausted" -> "Google Play returned ${collection.rows.size} review records and no further page for this selection; fewer than ${GooglePlayReviews.TARGET} may be available."
-                    "google_play_target_reached" -> "The requested limit of ${GooglePlayReviews.TARGET} review records was reached. More reviews may be available."
-                    else -> "Collection stopped at the review-page limit before reaching ${GooglePlayReviews.TARGET} records. More reviews may be available."
+                    "google_play_source_exhausted" -> "Google Play returned ${collection.rows.size} review records and no further page for this selection; ${collection.usableUniqueTexts} distinct nonblank texts were found. Fewer than ${GooglePlayReviews.TARGET} may be available."
+                    "google_play_target_reached" -> "The requested limit of ${GooglePlayReviews.TARGET} distinct written reviews was reached from ${collection.rows.size} review records. More reviews may be available."
+                    else -> "Collection stopped at the review-page limit with ${collection.usableUniqueTexts} distinct nonblank texts, before reaching ${GooglePlayReviews.TARGET}. More reviews may be available."
                 }
-                val warnings=listOf(completion) + if(collection.duplicateIds>0) listOf("${collection.duplicateIds} repeated source review IDs across pages were ignored.") else emptyList()
+                val warnings=buildList {
+                    add(completion)
+                    if(collection.duplicateIds>0) add("${collection.duplicateIds} repeated source review IDs were merged, retaining the newest dated version when available.")
+                    if(collection.unknownTimestamps>0) add("${collection.unknownTimestamps} review records have unknown publication timestamps and appear after dated reviews.")
+                }
                 val result=Normalize.scraped(entity,collection.rows,googlePlayUrl,Instant.now().toString(),"Google Play",warnings,pages,collection.stoppingReason,
-                    "Requested up to ${GooglePlayReviews.TARGET} written Google Play reviews, newest first, using English/US selection. ${collection.batches} review batches of up to ${GooglePlayReviews.BATCH_SIZE} records were retrieved. Ratings without written reviews are not imported. This selection does not establish complete worldwide review coverage; the total unseen review count is unknown.")
+                    "Requested up to ${GooglePlayReviews.TARGET} distinct written Google Play reviews, newest first, using English/US selection. ${collection.batches} review batches of up to ${GooglePlayReviews.BATCH_SIZE} records were retrieved. Additional records may be fetched to replace repeated or blank texts; token limits may still reduce the accepted count. Ratings without written reviews are not imported. This selection does not establish complete worldwide review coverage; the total unseen review count is unknown.")
                 checkActive(deadline,cancelled)
                 return@submit result
             }

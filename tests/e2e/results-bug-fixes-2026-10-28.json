@@ -1,0 +1,83 @@
+{
+  "run_at": "2026-10-28T16:15:54.803Z",
+  "base_url": "http://127.0.0.1:8092",
+  "passed": 15,
+  "failed": 0,
+  "results": [
+    {
+      "name": "public landing, health and secure session properties",
+      "status": "passed",
+      "duration_ms": 507
+    },
+    {
+      "name": "example import reports a synthetic bounded sample",
+      "status": "passed",
+      "duration_ms": 434
+    },
+    {
+      "name": "question resolves citations to the exact original review",
+      "status": "passed",
+      "duration_ms": 263
+    },
+    {
+      "name": "unrelated question is explicitly refused",
+      "status": "passed",
+      "duration_ms": 54
+    },
+    {
+      "name": "absent product fact returns insufficient evidence",
+      "status": "passed",
+      "duration_ms": 64
+    },
+    {
+      "name": "dataset and completed conversation survive reload",
+      "status": "passed",
+      "duration_ms": 118
+    },
+    {
+      "name": "all eleven completed exchanges remain visible after reload",
+      "status": "passed",
+      "duration_ms": 539
+    },
+    {
+      "name": "independent browser session cannot read or chat with another dataset",
+      "status": "passed",
+      "duration_ms": 17
+    },
+    {
+      "name": "invalid URL to paste fallback, preview, safe rendering and dataset replacement",
+      "status": "passed",
+      "duration_ms": 308
+    },
+    {
+      "name": "invalid URL to CSV fallback preserves BOM, quoted commas and multiline evidence",
+      "status": "passed",
+      "duration_ms": 196
+    },
+    {
+      "name": "API rejects empty and oversized input, unsupported CSV and invalid metadata",
+      "status": "passed",
+      "duration_ms": 52
+    },
+    {
+      "name": "unsupported live URL is rejected and cross-origin writes fail",
+      "status": "passed",
+      "duration_ms": 21
+    },
+    {
+      "name": "clear dataset deletes reviews and history across reload",
+      "status": "passed",
+      "duration_ms": 128
+    },
+    {
+      "name": "review count cap reports exclusions instead of claiming completeness",
+      "status": "passed",
+      "duration_ms": 28
+    },
+    {
+      "name": "mobile import, chat layout and evidence drawer fit the viewport",
+      "status": "passed",
+      "duration_ms": 1288
+    }
+  ]
+}

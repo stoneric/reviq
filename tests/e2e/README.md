@@ -11,17 +11,21 @@ NODE_PATH=/tmp/reviq-browser-tests/node_modules \
   node tests/e2e/acceptance.cjs
 ```
 
-Run against an isolated test database/server with generous test quotas. The full suite intentionally sends more requests than public production limits permit. Never loosen the public deployment's limits to run the suite. A production smoke check should use one dataset and at most three questions.
+Run against an isolated test database/server with generous test quotas and `OPENAI_API_KEY` unset. The suite requires evidence mode and intentionally sends more requests than public production limits permit. Never loosen the public deployment's limits to run the suite. A production smoke check should use one dataset and at most three questions.
 
 Results and screenshots are written to `/tmp/reviq-e2e` by default; override with `REVIQ_E2E_ARTIFACTS`. These artifacts contain only synthetic fixtures, and are not application files.
 
-Coverage: landing and mobile layout; demo import; supplied-sample summary; original citation text; off-topic refusal and insufficient evidence; persistence after reload; CSV BOM, quoted commas and multiline text; duplicates, invalid optional fields and rejected empty text; dataset replacement and deletion; session ownership and stale dataset IDs; byte/question bounds; safe rendering and source links; unsafe URL rejection and cross-origin rejection.
+Coverage: landing and mobile layout; demo import; supplied-sample summary; original citation text; off-topic refusal and insufficient evidence; persistence of all eleven chat exchanges after reload; CSV BOM, quoted commas and multiline text; invalid-URL fallback to both paste and CSV without carrying over the failed URL; duplicates, invalid optional fields and rejected empty text; dataset replacement and deletion; session ownership and stale dataset IDs; byte/question bounds; safe rendering and source links; unsafe URL rejection and cross-origin rejection.
+
+On 28 October 2026, the bug fixes passed **15/15 browser scenarios** against the isolated database with no paid provider calls. See [`results-bug-fixes-2026-10-28.json`](results-bug-fixes-2026-10-28.json). The current backend suite separately verifies usage reconciliation with synthetic SDK events and the concurrent Clear chat race against PostgreSQL. After deployment at 16:26 UTC, all **12 public HTTPS smoke checks passed** using one synthetic import and three AI requests, including cancelling the third response and confirming it was not saved. The hosted check deleted only its own dataset; see [`public-bug-fixes-2026-10-28.json`](public-bug-fixes-2026-10-28.json).
 
 A pass in evidence-search mode does **not** constitute a live-model evaluation. Live OpenAI grounding, injection resistance, usage accounting, provider failure cancellation, and streamed-draft semantic accuracy must be evaluated separately with the configured model.
 
-## Google Play target 200, batches of 100
+## Google Play verification
 
-On **2026-10-28 at 02:51 UTC**, both focused isolated browser checks passed with the current **200-review target and 100-review batch size**. Each flow made one direct, fresh URL import with no seed or chat requests. No Exa retrieval calls were made.
+The current collector targets 200 distinct, nonblank review texts, beginning with a 200-record request and filling shortfalls from later pages. The current browser script verifies newest-first order and the visible order label, with actual page counts retained for diagnostics. The recorded release checks below used the earlier 100-record batch size; their reports are unchanged.
+
+On **2026-10-28 at 02:51 UTC**, both focused isolated browser checks passed with the then-current **200-review target and 100-review batch size**. Each flow made one direct, fresh URL import with no seed or chat requests. No Exa retrieval calls were made.
 
 | App | Observed | Accepted | Duplicate text removed | Review batches | Total pages | Stop reason |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
@@ -41,13 +45,13 @@ NODE_PATH=/tmp/reviq-browser-tests/node_modules \
   REVIQ_BASE_URL=http://127.0.0.1:8089 \
   REVIQ_GOOGLE_PLAY_URL='https://play.google.com/store/apps/details?id=com.spotify.music' \
   REVIQ_EXPECT_ENTITY=Spotify \
-  REVIQ_EXPECT_REVIEW_COUNT=197 \
+  REVIQ_EXPECT_REVIEW_COUNT=200 \
   node tests/e2e/google-play-reviews-smoke.cjs
 ```
 
-`google-play-reviews-smoke.cjs` makes exactly one fresh Google Play import, with no seed or chat requests. It checks capabilities and dataset metadata for target200/batch100, actual accepted/observed counts, count/token limits, normalized-text uniqueness, rating/date statistics, visible page/batch provenance, exact first/middle/final evidence, final-review search, reload, and mobile layout. It removes only its own session dataset afterward. Review text and authors remain in memory; reports contain metadata and counts only. Artifacts default to `/tmp/reviq-google-play-reviews`; use `REVIQ_E2E_ARTIFACTS` to keep separate runs. Use the HTTPS base URL only for a coordinated production check.
+`google-play-reviews-smoke.cjs` makes exactly one fresh Google Play import, with no seed or chat requests. It checks the 200-review target, actual accepted/observed counts, count/token limits, normalized-text uniqueness, newest-first ordering, rating/date statistics, visible order/page provenance, exact first/middle/final evidence, final-review search, reload, and mobile layout. It removes only its own session dataset afterward. Review text and authors remain in memory; reports contain metadata and counts only. Artifacts default to `/tmp/reviq-google-play-reviews`; use `REVIQ_E2E_ARTIFACTS` to keep separate runs. Use the HTTPS base URL only for a coordinated production check.
 
-Defaults match OnePageCRM: 83 accepted/observed, one review batch, two total pages, and `google_play_source_exhausted`. Set `REVIQ_GOOGLE_PLAY_URL` and `REVIQ_EXPECT_ENTITY` to test another app. Other apps default to 200 observed, two batches, three total pages, and `google_play_target_reached`; set `REVIQ_EXPECT_REVIEW_COUNT` to require a known accepted count. Override `REVIQ_EXPECT_OBSERVED_COUNT`, `REVIQ_EXPECT_REVIEW_BATCHES`, `REVIQ_EXPECT_PAGES`, or `REVIQ_EXPECT_STOPPING_REASON` only when source observations justify a different expectation. The summary must always reconcile observed, accepted, rejected, duplicate and excluded counts.
+Defaults match the recorded OnePageCRM sample: 83 accepted/observed and `google_play_source_exhausted`. Set `REVIQ_GOOGLE_PLAY_URL` and `REVIQ_EXPECT_ENTITY` to test another app. Other apps default to 200 accepted reviews and `google_play_target_reached`; their observed count can exceed 200 when extra records replace duplicates or blank text. Set `REVIQ_EXPECT_REVIEW_COUNT`, `REVIQ_EXPECT_OBSERVED_COUNT`, or `REVIQ_EXPECT_STOPPING_REASON` only when source observations justify a different expectation. Page counts are checked for consistency rather than a fixed batch total. The summary must always reconcile observed, accepted, rejected, duplicate and excluded counts.
 
 ## Historical Google Play target 100, batches of 50
 

@@ -26,7 +26,8 @@ class GooglePlayPaginationTest {
         assertEquals("direct",data.retrieval_provider); assertEquals("live",data.retrieval_freshness)
         assertFalse(Instant.parse(data.captured_at).isBefore(started))
         assertEquals(3,data.summary.pages["attempted"]); assertEquals(3,data.summary.pages["fetched"]); assertEquals(3,data.summary.pages["parsed"])
-        assertEquals(2,data.summary.pages["review_batches"]); assertEquals(200,data.summary.pages["requested_reviews"]); assertEquals(100,data.summary.pages["batch_size"])
+        assertEquals(2,data.summary.pages["review_batches"]); assertEquals(200,data.summary.pages["requested_reviews"]); assertEquals(200,data.summary.pages["batch_size"])
+        assertEquals("newest_first",data.summary.pages["review_order"])
         assertEquals("google_play_target_reached",data.summary.stopping_reason)
         assertTrue(data.summary.warnings.any { it.contains("newest first") && it.contains("English/US") })
         assertFalse(data.summary.warnings.any { it.contains("No review pagination") })
@@ -66,15 +67,15 @@ class GooglePlayPaginationTest {
     }
 
     @Test fun `normalization exclusions remain honest after collection reaches the target`() {
-        val records=rows(200).toMutableList()
+        val records=rows(201).toMutableList()
         records[0]=records[0]+("text" to "oversized synthetic evidence ".repeat(10000))
         records[1]=records[2]
         val data=scraper(GooglePlayReviewSource { _,_,_,_ -> GooglePlayCollection(records,2,"google_play_target_reached") }).scrape(url)
-        assertEquals(200,data.summary.observed); assertEquals(198,data.reviews.size)
+        assertEquals(201,data.summary.observed); assertEquals(199,data.reviews.size)
         assertEquals(1,data.summary.excluded); assertEquals(1,data.summary.duplicates)
         assertEquals("token_limit",data.summary.stopping_reason)
         assertEquals(data.summary.observed,data.summary.accepted+data.summary.rejected+data.summary.duplicates+data.summary.excluded)
-        assertTrue(data.summary.warnings.any { it.contains("200 review records") })
+        assertTrue(data.summary.warnings.any { it.contains("201 review records") && it.contains("200 distinct written reviews") })
     }
 
     @Test fun `app metadata must bind the requested package and cannot be a challenge heading`() {
@@ -125,11 +126,12 @@ class GooglePlayPaginationTest {
         for(id in listOf("com.onepagecrm","com.spotify.music")) {
             val data=ReviewScraper(googlePlaySource=GooglePlayReviews).scrape("https://play.google.com/store/apps/details?id=$id")
             assertTrue(data.reviews.size in 4..200)
-            assertEquals(200,data.summary.pages["requested_reviews"]); assertEquals(100,data.summary.pages["batch_size"])
+            assertEquals(200,data.summary.pages["requested_reviews"]); assertEquals(200,data.summary.pages["batch_size"])
+            assertEquals("newest_first",data.summary.pages["review_order"])
             assertTrue((data.summary.pages["review_batches"] as Int)>=1)
             assertTrue(data.summary.stopping_reason in setOf("google_play_source_exhausted","google_play_target_reached","token_limit"))
             assertEquals(data.summary.observed,data.summary.accepted+data.summary.rejected+data.summary.duplicates+data.summary.excluded)
-            if(id=="com.spotify.music") { assertEquals(200,data.summary.observed); assertTrue(data.reviews.size>100) }
+            if(id=="com.spotify.music") { assertTrue(data.summary.observed>=200); assertTrue(data.reviews.size>100) }
             println("Live paginated Google Play verified: $id, observed=${data.summary.observed}, accepted=${data.reviews.size}, batches=${data.summary.pages["review_batches"]}, stop=${data.summary.stopping_reason}")
         }
     }

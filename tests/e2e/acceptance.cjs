@@ -74,6 +74,7 @@ async function main() {
     assert.equal(health.status(), 200, await health.text());
     const state = await session(context);
     assert.equal(state.dataset, null);
+    assert.equal(state.capabilities.ai_enabled, false, 'Run acceptance against an isolated evidence-mode server');
     assert.equal(typeof state.capabilities.live_scraping, 'boolean');
     if (state.capabilities.live_scraping) {
       assert.ok(state.capabilities.supported_platforms.includes('Google Play'));
@@ -141,6 +142,17 @@ async function main() {
     await bodyHas(page, 'What is the weather in San Francisco?');
     await page.screenshot({ path: path.join(artifacts, 'desktop-workspace.png'), fullPage: true });
   });
+  await check('all eleven completed exchanges remain visible after reload', async () => {
+    for (let i = 4; i <= 11; i++) await ask(`What is the average rating? Question ${i}.`);
+    const before = (await session(context)).history;
+    assert.equal(before.length, 22);
+    assert.equal(await page.getByTestId('assistant-message').count(), 11);
+    await page.reload();
+    await page.getByRole('button', { name: 'New', exact: true }).waitFor();
+    assert.deepEqual((await session(context)).history, before);
+    assert.equal(await page.getByTestId('assistant-message').count(), 11);
+    await bodyHas(page, 'What do reviews say about delivery?');
+  });
   await check('independent browser session cannot read or chat with another dataset', async () => {
     const outsider = await browser.newContext({ baseURL });
     const state = await session(outsider);
@@ -151,9 +163,11 @@ async function main() {
     await outsider.close();
   });
   let pasted;
-  await check('paste preview, duplicate removal, safe rendering and dataset replacement', async () => {
+  await check('invalid URL to paste fallback, preview, safe rendering and dataset replacement', async () => {
     await page.getByRole('button', { name: 'New', exact: true }).click();
-    await page.getByRole('tab', { name: 'Paste reviews', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Review page URL', exact: true }).fill('not-a-valid-url');
+    await page.getByRole('button', { name: 'Ingest reviews', exact: true }).click();
+    await page.getByRole('button', { name: 'Paste reviews instead', exact: true }).click();
     await page.getByLabel('Entity name').fill('Acceptance Product B');
     await page.getByLabel('Source platform').fill('Synthetic test reviews');
     await page.getByLabel('Pasted reviews').fill(paste);
@@ -162,11 +176,16 @@ async function main() {
     await preview.waitFor();
     assert.match(await preview.innerText(), /3 observed records/);
     assert.equal((await session(context)).dataset.id, demo.id, 'Preview must not replace the dataset');
+    const importResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/ingest' && response.request().method() === 'POST');
     await preview.getByRole('button', { name: 'Import and analyze' }).click();
+    const response = await importResponse;
+    assert.equal(response.status(), 200);
+    assert.equal(response.request().postDataJSON().url, undefined, 'The failed URL must not accompany pasted text');
     await page.getByRole('button', { name: 'New', exact: true }).waitFor();
     pasted = (await session(context)).dataset;
     assert.notEqual(pasted.id, demo.id);
     assert.equal(pasted.entity_name, 'Acceptance Product B');
+    assert.equal(pasted.source_url, null);
     assert.equal(pasted.summary.observed, 3);
     assert.equal(pasted.summary.accepted, 2);
     assert.equal(pasted.summary.duplicates, 1);
@@ -184,9 +203,11 @@ async function main() {
     await apiError(context, '/api/chat', { dataset_id: demo.id, question: 'Show old reviews' }, [404, 409]);
   });
   let uploaded;
-  await check('CSV BOM, quoted commas and multiline text preserve evidence and reconcile counts', async () => {
+  await check('invalid URL to CSV fallback preserves BOM, quoted commas and multiline evidence', async () => {
     await page.getByRole('button', { name: 'New', exact: true }).click();
-    await page.getByRole('tab', { name: 'Upload CSV', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Review page URL', exact: true }).fill('javascript:invalid');
+    await page.getByRole('button', { name: 'Ingest reviews', exact: true }).click();
+    await page.getByRole('button', { name: 'Upload CSV instead', exact: true }).click();
     await page.getByLabel('Entity name').fill('Acceptance CSV Product');
     await page.getByLabel('Source platform').fill('User supplied synthetic CSV');
     await page.getByLabel('Upload CSV file').setInputFiles({ name: 'acceptance.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
@@ -194,9 +215,14 @@ async function main() {
     const preview = page.getByRole('dialog', { name: 'Check your import' });
     await preview.waitFor();
     assert.match(await preview.innerText(), /5 observed records/);
+    const importResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/ingest' && response.request().method() === 'POST');
     await preview.getByRole('button', { name: 'Import and analyze' }).click();
+    const response = await importResponse;
+    assert.equal(response.status(), 200);
+    assert.equal(response.request().postDataJSON().url, undefined, 'The failed URL must not accompany a CSV import');
     await page.getByRole('button', { name: 'New', exact: true }).waitFor();
     uploaded = (await session(context)).dataset;
+    assert.equal(uploaded.source_url, null);
     const summary = uploaded.summary;
     assert.equal(summary.observed, 5);
     assert.equal(summary.accepted, 3);

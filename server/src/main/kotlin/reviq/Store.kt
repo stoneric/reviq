@@ -42,19 +42,29 @@ class Store : AutoCloseable {
     } }
     private fun lockSession(c: Connection, session: String) { c.prepareStatement("SELECT id FROM anonymous_sessions WHERE id=? FOR UPDATE").use { s -> s.setString(1,session); s.executeQuery().close() } }
     fun clear(session: String) { transaction { c -> lockSession(c,session); execute(c,"DELETE FROM datasets WHERE session_id=?",session) } }
-    fun clearChat(session: String) { transaction { c -> lockSession(c,session); execute(c,"DELETE FROM chat_messages WHERE session_id=?",session) } }
-    fun history(session: String, dataset: String): List<Message> = pool.connection.use { c -> c.prepareStatement("SELECT role,content,citations::text,mode FROM (SELECT id,role,content,citations,mode FROM chat_messages WHERE session_id=? AND dataset_id=?::uuid ORDER BY id DESC LIMIT 20) h ORDER BY id").use { s ->
+    fun clearChat(session: String) { transaction { c ->
+        lockSession(c,session)
+        execute(c,"UPDATE datasets SET conversation_revision=conversation_revision+1 WHERE session_id=?",session)
+        execute(c,"DELETE FROM chat_messages WHERE session_id=?",session)
+    } }
+    fun conversationRevision(session: String, dataset: String): Long? = pool.connection.use { c ->
+        c.prepareStatement("SELECT conversation_revision FROM datasets WHERE session_id=? AND id=?::uuid AND expires_at>now()").use { s ->
+            s.setString(1,session); s.setString(2,dataset); s.executeQuery().use { r -> if(r.next()) r.getLong(1) else null }
+        }
+    }
+    fun history(session: String, dataset: String): List<Message> = pool.connection.use { c -> c.prepareStatement("SELECT role,content,citations::text,mode FROM chat_messages WHERE session_id=? AND dataset_id=?::uuid ORDER BY id").use { s ->
         s.setString(1,session); s.setString(2,dataset); s.executeQuery().use { r -> buildList { while(r.next()) add(Message(r.getString(1),r.getString(2),mapper.readValue(r.getString(3)),r.getString(4))) } }
     } }
-    fun saveExchange(session: String, dataset: String, question: String, answer: String, citations: List<String>, mode: String) { transaction { c ->
+    fun saveExchange(session: String, dataset: String, question: String, answer: String, citations: List<String>, mode: String, revision: Long): Boolean = transaction { c ->
         lockSession(c,session)
         // An import or clear during streaming must never resurrect the old conversation.
-        val exists = c.prepareStatement("SELECT 1 FROM datasets WHERE session_id=? AND id=?::uuid AND expires_at>now()").use { s -> s.setString(1,session); s.setString(2,dataset); s.executeQuery().use { it.next() } }
+        val exists = c.prepareStatement("SELECT 1 FROM datasets WHERE session_id=? AND id=?::uuid AND expires_at>now() AND conversation_revision=?").use { s -> s.setString(1,session); s.setString(2,dataset); s.setLong(3,revision); s.executeQuery().use { it.next() } }
         if(exists) {
             execute(c,"INSERT INTO chat_messages(session_id,dataset_id,role,content,citations,mode) VALUES(?,?::uuid,'user',?,'[]',?)",session,dataset,question,mode)
             execute(c,"INSERT INTO chat_messages(session_id,dataset_id,role,content,citations,mode) VALUES(?,?::uuid,'assistant',?,?::jsonb,?)",session,dataset,answer,mapper.writeValueAsString(citations),mode)
         }
-    } }
+        exists
+    }
     fun reserve(kind: String, session: String, ip: String, cost: Double = 0.0): String = transaction { c ->
         c.createStatement().use { it.execute("SELECT pg_advisory_xact_lock(782391147)") }
         val now = Instant.now(); val minute = now.epochSecond/60; val day = LocalDate.now(ZoneOffset.UTC)
