@@ -1,0 +1,67 @@
+{
+  "run_at": "2026-10-27T23:58:13.735Z",
+  "base_url": "https://reviq.xyz",
+  "passed": false,
+  "imports": [
+    {
+      "entity": "Spotify: Music and Podcasts",
+      "source_url": "https://play.google.com/store/apps/details?id=com.spotify.music&hl=en&gl=US",
+      "captured_at": "2026-10-27T23:58:14.435261961Z",
+      "mode": "scraped",
+      "review_count": 3,
+      "observed": 3,
+      "rejected": 0,
+      "duplicates": 0,
+      "excluded": 0,
+      "pages": {
+        "parsed": 1,
+        "fetched": 1,
+        "attempted": 1
+      },
+      "stopping_reason": "visible_page_sample",
+      "scanned_total_known": false,
+      "duration_ms": 1531
+    },
+    {
+      "entity": "WhatsApp",
+      "source_url": "https://play.google.com/store/apps/details?id=com.whatsapp&hl=en&gl=US",
+      "captured_at": "2026-10-27T23:58:15.935094327Z",
+      "mode": "scraped",
+      "review_count": 3,
+      "observed": 3,
+      "rejected": 0,
+      "duplicates": 0,
+      "excluded": 0,
+      "pages": {
+        "parsed": 1,
+        "fetched": 1,
+        "attempted": 1
+      },
+      "stopping_reason": "visible_page_sample",
+      "scanned_total_known": false,
+      "duration_ms": 348
+    }
+  ],
+  "checks": [
+    "unsupported platform rejected locally with CSV/paste recovery",
+    "2 fresh real Google Play imports",
+    "canonical source URL and fresh capture timestamp",
+    "bounded partial-page provenance",
+    "accurate accepted/rejected/duplicate/excluded counts",
+    "original evidence text matches without synthetic labels",
+    "dataset replacement clears prior context"
+  ],
+  "model": "gpt-4.1-2025-04-14",
+  "chat_events": [
+    {
+      "event": "error",
+      "code": "unverified_quote",
+      "message": "The answer included a quotation that does not match its cited review and has not been saved."
+    }
+  ],
+  "assistant_error": "The answer included a quotation that does not match its cited review and has not been saved.",
+  "error": {
+    "name": "AssertionError",
+    "message": "A live scraper acceptance assertion failed; inspect the private local run output. No captured customer text is included in this report."
+  }
+}

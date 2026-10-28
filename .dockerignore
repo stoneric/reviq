@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+!.env.example
+.gradle
+build
+web/node_modules
+web/dist
+artifacts
+.ai-transcripts-private
+ai-transcripts
+Reviq_Implementation_Plan.pdf

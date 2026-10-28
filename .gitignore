@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+.gradle/
+build/
+server/build/
+web/node_modules/
+web/dist/
+*.log
+artifacts/
+.ai-transcripts-private/
+
+*.tsbuildinfo

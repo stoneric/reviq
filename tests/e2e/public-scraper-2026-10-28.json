@@ -1,0 +1,70 @@
+{
+  "run_at": "2026-10-28T00:10:29.798Z",
+  "base_url": "https://reviq.xyz",
+  "passed": true,
+  "imports": [
+    {
+      "entity": "Spotify: Music and Podcasts",
+      "source_url": "https://play.google.com/store/apps/details?id=com.spotify.music&hl=en&gl=US",
+      "captured_at": "2026-10-28T00:10:31.096566428Z",
+      "mode": "scraped",
+      "review_count": 3,
+      "observed": 3,
+      "rejected": 0,
+      "duplicates": 0,
+      "excluded": 0,
+      "pages": {
+        "parsed": 1,
+        "fetched": 1,
+        "attempted": 1
+      },
+      "stopping_reason": "visible_page_sample",
+      "scanned_total_known": false,
+      "duration_ms": 1533
+    },
+    {
+      "entity": "WhatsApp",
+      "source_url": "https://play.google.com/store/apps/details?id=com.whatsapp&hl=en&gl=US",
+      "captured_at": "2026-10-28T00:10:32.543435340Z",
+      "mode": "scraped",
+      "review_count": 3,
+      "observed": 3,
+      "rejected": 0,
+      "duplicates": 0,
+      "excluded": 0,
+      "pages": {
+        "parsed": 1,
+        "fetched": 1,
+        "attempted": 1
+      },
+      "stopping_reason": "visible_page_sample",
+      "scanned_total_known": false,
+      "duration_ms": 450
+    }
+  ],
+  "checks": [
+    "unsupported platform rejected locally with CSV/paste recovery",
+    "2 fresh real Google Play imports",
+    "canonical source URL and fresh capture timestamp",
+    "bounded partial-page provenance",
+    "accurate accepted/rejected/duplicate/excluded counts",
+    "original evidence text matches without synthetic labels",
+    "dataset replacement clears prior context",
+    "live AI question grounded in imported reviews",
+    "answer quote spans validated against original text",
+    "citations resolve exact evidence",
+    "dataset and completed answer persist after reload",
+    "no browser errors or overflow"
+  ],
+  "model": "gpt-4.1-2025-04-14",
+  "prompt_version": "reviq-grounded-v5",
+  "chat_events": [
+    {
+      "event": "done",
+      "verified": true,
+      "citation_count": 3,
+      "outcome": "answer"
+    }
+  ],
+  "validated_quote_count": 6
+}

@@ -1,0 +1,28 @@
+[Unit]
+Description=Reviq review intelligence API
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=reviq
+Group=reviq
+WorkingDirectory=/opt/reviq/current
+EnvironmentFile=/etc/reviq/reviq.env
+ExecStart=/opt/reviq/current/bin/reviq
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+UMask=0077
+MemoryMax=768M
+Environment=JAVA_OPTS=-Xmx384m
+
+[Install]
+WantedBy=multi-user.target

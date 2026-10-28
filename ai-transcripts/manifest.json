@@ -1,0 +1,62 @@
+{
+  "format": "privacy-filtered-visible-event-export-v2",
+  "snapshot_utc": "2026-10-28T00:10:47.836218+00:00",
+  "complete_raw_transcript": false,
+  "excluded": [
+    "system/developer instructions",
+    "private reasoning",
+    "internal context and bookkeeping",
+    "all tool arguments and result bodies",
+    "private host inventory and cross-project filesystem paths",
+    "credential values and credential-shaped tokens"
+  ],
+  "original_logs": "Preserved unchanged in local Codex session storage; not included in this public repository.",
+  "sessions": [
+    {
+      "file": "visible-2026-10-27T23-18-42-01a17fa8-abe3-7081-9300-9ea7dea879cb.jsonl",
+      "purpose": "implementation coordinator",
+      "recorded_events": 349,
+      "excluded_private_or_internal_events": 1086,
+      "publication_redactions": {
+        "runtime or agent context omitted": 2,
+        "complete tool payload omitted": 320,
+        "private filesystem paths": 1
+      },
+      "sha256": "311d202051f677b5d46296f5ebc4b3746e8be37f5d9374fdc827a19821b97fb1"
+    },
+    {
+      "file": "visible-2026-10-27T23-19-23-01a17fa9-4a51-7f21-aeb4-a1c92e7e4ea6.jsonl",
+      "purpose": "reference design and frontend",
+      "recorded_events": 112,
+      "excluded_private_or_internal_events": 266,
+      "publication_redactions": {
+        "runtime or agent context omitted": 1,
+        "complete tool payload omitted": 105,
+        "host configuration paths": 6
+      },
+      "sha256": "ae4cada4c7453d484edccf06c02a0894c85edb05e5dca635fd1778f219fb3dd8"
+    },
+    {
+      "file": "visible-2026-10-27T23-20-06-01a17fa9-f243-7da2-a86a-2acb277f5d79.jsonl",
+      "purpose": "Kotlin backend and tests",
+      "recorded_events": 204,
+      "excluded_private_or_internal_events": 590,
+      "publication_redactions": {
+        "runtime or agent context omitted": 2,
+        "complete tool payload omitted": 191
+      },
+      "sha256": "0b397c2029e440070475a3a9f7c23213d04c95344789f6804d7ab5ceb14cc8b9"
+    },
+    {
+      "file": "visible-2026-10-27T23-20-45-01a17faa-891a-7a40-b759-95174b48e3c3.jsonl",
+      "purpose": "acceptance tests and publication review",
+      "recorded_events": 318,
+      "excluded_private_or_internal_events": 795,
+      "publication_redactions": {
+        "runtime or agent context omitted": 2,
+        "complete tool payload omitted": 312
+      },
+      "sha256": "86920838ce0d6a68e7ddd902c8179156cb4845bd6145c8f0d6dcddc27a5ac0b8"
+    }
+  ]
+}

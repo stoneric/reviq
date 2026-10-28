@@ -1,0 +1,138 @@
+{
+  "run_at": "2026-10-27T23:51:04.130Z",
+  "base_url": "http://127.0.0.1:8089",
+  "results": [
+    {
+      "name": "empty",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 7
+    },
+    {
+      "name": "http",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 8
+    },
+    {
+      "name": "loopback",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 5
+    },
+    {
+      "name": "ipv6 loopback",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 5
+    },
+    {
+      "name": "private address",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 4
+    },
+    {
+      "name": "userinfo",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 5
+    },
+    {
+      "name": "host suffix",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 4
+    },
+    {
+      "name": "host prefix",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 4
+    },
+    {
+      "name": "alternate port",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 4
+    },
+    {
+      "name": "fragment",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "encoded path",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 4
+    },
+    {
+      "name": "extra path",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "dot path",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "missing package",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 4
+    },
+    {
+      "name": "duplicate package",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "unknown query",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "invalid package",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "package delimiter",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 4
+    },
+    {
+      "name": "path in package",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "non-web protocol",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "malformed escape",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "other platform",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    }
+  ]
+}
