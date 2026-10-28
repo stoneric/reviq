@@ -89,15 +89,35 @@ internal class ReviewScraper(
     private val fetcher: PageFetcher=PublicPageFetcher,
     private val timeoutMillis: Long=15000,
     private val exaFetcher: ExaPageFetcher?=null,
+    private val exaCachedFetcher: ExaPageFetcher?=null,
     private val reserveExa: ()->String = { throw ApiError(503,"exa_budget_unavailable","Live retrieval accounting is unavailable. Try CSV upload or paste.") },
     private val reconcileExa: (String,Double)->Unit = { _,_ -> }
 ) {
-    fun scrape(rawUrl: String, cancelled: AtomicBoolean = AtomicBoolean(false)): Dataset {
+    fun scrape(rawUrl: String, cancelled: AtomicBoolean = AtomicBoolean(false), cacheOnly: Boolean = false): Dataset {
         val canonical=canonicalUrl(rawUrl)
+        if(cacheOnly && exaCachedFetcher==null) throw ApiError(503,"exa_not_configured","Cached page retrieval is not configured. Use CSV upload or paste.")
         val deadline=System.nanoTime()+TimeUnit.MILLISECONDS.toNanos(timeoutMillis)
         val activeCall=AtomicReference<Call?>(null)
         val task=try { ScrapeRuntime.jobs.submit<Dataset> {
             var finalUrl=canonical
+            fun fromProvider(provider: ExaPageFetcher, cached: Boolean): Dataset {
+                checkActive(deadline,cancelled)
+                if(PublicPageFetcher.remaining(deadline)<TimeUnit.SECONDS.toNanos(2)) throw timeout()
+                val reservation=reserveExa()
+                checkActive(deadline,cancelled)
+                val supplied=provider.fetch(finalUrl,deadline,cancelled,activeCall)
+                supplied.costUsd?.let { reconcileExa(reservation,it) }
+                checkActive(deadline,cancelled)
+                if(supplied.freshness!=if(cached) "cached" else "crawled") throw ApiError(422,"exa_freshness_mismatch","The provider did not return the requested freshness. No reviews were imported.")
+                val parsed=ReviewPageParser.parseProvider(supplied.html,supplied.url)
+                val retrieved=Instant.now().toString()
+                val provenance=if(cached) "Cached snapshot retrieved through Exa. The original capture date is unknown and reviews may be outdated; this is not a live scrape." else "Retrieved through Exa with a fresh-crawl request. Review text is preserved as returned by the provider; only identifiable records in that page are included."
+                val data=Normalize.scraped(parsed.entity,parsed.rows,supplied.url,retrieved,parsed.platform,parsed.warnings + provenance)
+                checkActive(deadline,cancelled)
+                return data.copy(retrieval_provider="exa",retrieval_freshness=if(cached) "cached" else "live",captured_at=if(cached) null else retrieved,retrieved_at=retrieved,
+                    summary=data.summary.copy(stopping_reason=if(cached && data.summary.stopping_reason=="visible_page_sample") "cached_page_sample" else data.summary.stopping_reason))
+            }
+            if(cacheOnly) return@submit fromProvider(exaCachedFetcher!!,true)
             var redirects=0
             val visited=mutableSetOf(finalUrl)
             try {
@@ -132,18 +152,7 @@ internal class ReviewScraper(
                 // Only retrieval/markup failures qualify. Bad destinations, ambiguous entities,
                 // cancellation, redirects and deadlines never turn into paid provider requests.
                 if(exaFetcher==null || e.code !in setOf("scrape_blocked","scrape_no_reviews","scrape_parse_failure","scrape_body_limit","scrape_encoding")) throw e
-                checkActive(deadline,cancelled)
-                if(PublicPageFetcher.remaining(deadline)<TimeUnit.SECONDS.toNanos(2)) throw timeout()
-                val reservation=reserveExa()
-                checkActive(deadline,cancelled)
-                val supplied=exaFetcher.fetch(finalUrl,deadline,cancelled,activeCall)
-                supplied.costUsd?.let { reconcileExa(reservation,it) }
-                checkActive(deadline,cancelled)
-                val parsed=ReviewPageParser.parse(supplied.html,supplied.url)
-                val data=Normalize.scraped(parsed.entity,parsed.rows,supplied.url,Instant.now().toString(),parsed.platform,
-                    parsed.warnings + "Retrieved through Exa with a fresh-crawl request. Review text is preserved as returned by the provider; only identifiable records in that page are included.")
-                checkActive(deadline,cancelled)
-                data.copy(retrieval_provider="exa")
+                fromProvider(exaFetcher,false)
             }
         } } catch(_: RejectedExecutionException) { throw ApiError(503,"scrape_busy","Two review imports are already running. Wait a moment, or use CSV upload or paste.") }
         try {

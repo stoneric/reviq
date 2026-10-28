@@ -19,19 +19,35 @@ Coverage: landing and mobile layout; demo import; supplied-sample summary; origi
 
 A pass in evidence-search mode does **not** constitute a live-model evaluation. Live OpenAI grounding, injection resistance, usage accounting, provider failure cancellation, and streamed-draft semantic accuracy must be evaluated separately with the configured model.
 
-## Current public review URL verification
+## Explicit Exa cached retrieval
+
+On 2026-10-28 at 02:05 UTC, the isolated Exa-enabled build passed the focused cached-import browser flow, all **14/14** browser regressions in evidence mode, and **31/31** URL/cache security cases. The security additions reject a nonboolean cache option, cached mode on CSV, and a cached request targeting loopback before provider retrieval. Reports: [`exa-cache-browser-2026-10-28.json`](exa-cache-browser-2026-10-28.json), [`results-exa-cache-2026-10-28.json`](results-exa-cache-2026-10-28.json), and [`scraper-security-exa-cache-2026-10-28.json`](scraper-security-exa-cache-2026-10-28.json).
+
+Fresh retrieval of the supplied Trustpilot Allen Brothers URL returned `422 exa_fresh_blocked` and preserved the active dataset. Explicit cached retrieval then imported **one review** through Exa. The browser verified exact evidence, the visible cached/unknown-age warning, `captured_at: null`, a separate current `retrieved_at`, persistence, and mobile layout. This is a successful cached import, **not a successful fresh Trustpilot fetch**. The focused test made two URL requests and zero chat requests; customer review text and authors stayed in memory.
+
+The deployed HTTPS check passed on **2026-10-28 at 02:11 UTC**. Explicit cached retrieval imported one Allen Brothers review via Exa; the subsequent fresh request returned `422 exa_fresh_blocked` and preserved that cached dataset. Unknown capture date, separate retrieval time, visible warning, exact evidence, reload persistence, and mobile layout all passed. This run used exactly two URL imports, no synthetic seed, and no chat requests. See [`exa-cache-hosted-2026-10-28.json`](exa-cache-hosted-2026-10-28.json).
+
+```sh
+NODE_PATH=/tmp/reviq-browser-tests/node_modules \
+  REVIQ_BASE_URL=http://127.0.0.1:8089 \
+  node tests/e2e/exa-cache-smoke.cjs
+```
+
+`exa-cache-smoke.cjs` requires Exa to be configured and can incur provider usage. Its default isolated run creates one synthetic baseline, checks fresh-failure preservation, then imports the explicitly selected cached snapshot. For a coordinated public check, set `REVIQ_HOSTED_SMOKE=1` and the HTTPS base URL: it imports the cached snapshot first, then checks that a fresh attempt fails without replacing it, using exactly two URL imports and no seed. It verifies the checkbox starts unchecked and resets on URL changes, then deletes only its own session dataset. Reports default to `/tmp/reviq-exa-cache-smoke`; override with `REVIQ_E2E_ARTIFACTS`.
+
+## Historical direct-fetch public URL verification
 
 The current frontend accepts HTTP/HTTPS review URLs on their default ports without a platform, path, or query whitelist. Embedded credentials and custom ports remain rejected; the backend checks public network destinations and redirects. A valid public URL does not guarantee that a site exposes accessible, identifiable reviews.
 
-On 2026-10-28, the isolated PostgreSQL/server run passed:
+On 2026-10-28, before Exa was enabled, the isolated PostgreSQL/server run passed:
 
 - **14/14** full browser acceptance scenarios: [`results-public-urls-2026-10-28.json`](results-public-urls-2026-10-28.json).
-- **28/28** URL security cases, including forbidden schemes, credentials, custom ports, localhost aliases, IPv4/IPv6 private, loopback, link-local, unspecified, and reserved destinations: [`scraper-security-public-urls-2026-10-28.json`](scraper-security-public-urls-2026-10-28.json). Every rejected request preserved the active dataset.
+- **28/28** URL security cases, including forbidden schemes, credentials, custom ports, localhost aliases, IPv4/IPv6 private, loopback, link-local, unspecified, and reserved destinations: [`scraper-security-public-urls-2026-10-28.json`](scraper-security-public-urls-2026-10-28.json). Every rejected request preserved the active dataset. The current suite has **31** cases, including the three cache-mode checks documented above.
 - The public review URL browser flow, with **zero model calls**: [`review-url-browser-2026-10-28.json`](review-url-browser-2026-10-28.json). The supplied Trustpilot Allen Brothers URL reached the server, but the source blocked the fetch. The app reported `scrape_blocked`, retained the prior dataset, and offered CSV/paste recovery. The Anker product page successfully supplied five reviews, with exact evidence, safe per-review source links, capture/provenance metadata, and reload persistence. The final provider-disabled build also verifies `retrieval_provider=direct` against the visible **Direct page fetch** provenance row.
 
 The Trustpilot outcome is a verified recovery path, **not a successful live Trustpilot import**. Neither these tests nor the UI claim that every review site can be scraped. Reports contain only source metadata and counts; customer review bodies and author names are not saved as public test artifacts.
 
-The final deployed HTTPS smoke passed on **2026-10-28 at 00:46 UTC**: exactly two URL import requests, no seed import, and no chat requests. Anker supplied five dated reviews through direct retrieval; the API and visible provenance agreed, and the dates reconciled with the summary. The subsequent Trustpilot request returned `422 scrape_blocked`, preserved the Anker dataset through reload, and displayed CSV/paste alternatives. Exa remained disabled because its credential was not available; this run does **not** verify live Exa retrieval. See [`review-url-hosted-2026-10-28.json`](review-url-hosted-2026-10-28.json).
+The deployed direct-fetch HTTPS smoke passed on **2026-10-28 at 00:46 UTC**: exactly two URL import requests, no seed import, and no chat requests. Anker supplied five dated reviews through direct retrieval; the API and visible provenance agreed, and the dates reconciled with the summary. The subsequent Trustpilot request returned `422 scrape_blocked`, preserved the Anker dataset through reload, and displayed CSV/paste alternatives. Exa was disabled for that historical run; the later configured Exa/cache result is documented above. See [`review-url-hosted-2026-10-28.json`](review-url-hosted-2026-10-28.json).
 
 ```sh
 NODE_PATH=/tmp/reviq-browser-tests/node_modules \
@@ -58,7 +74,7 @@ NODE_PATH=/tmp/reviq-browser-tests/node_modules \
   node tests/e2e/public-review-url-smoke.cjs
 ```
 
-When Exa retrieval is configured, require the supplied Trustpilot URL to import successfully through Exa without making a chat/model request:
+The following command conditionally requires **fresh** Trustpilot retrieval through Exa. It is intended for a future run when source access is available and currently fails for the supplied URL with `exa_fresh_blocked`; configuring Exa alone does not make that source accessible. It never selects cached retrieval. Use `exa-cache-smoke.cjs` above for the verified explicit-cache workflow.
 
 ```sh
 NODE_PATH=/tmp/reviq-browser-tests/node_modules \
@@ -90,7 +106,7 @@ Public smoke passed on 2026-10-27 at 23:39 UTC against `https://reviq.xyz`, usin
 
 After enabling Google Play imports, the full browser suite was rerun against the isolated test instance: **14 passed, 0 failed**. See [`results-scraping-2026-10-27.json`](results-scraping-2026-10-27.json).
 
-The Google Play-only release tested 22 malformed or unsupported URLs, including other platforms, fragments, and alternate app paths. Those platform/path restrictions were removed by the public-URL release; the current `scraper-security.cjs` checks the 28 safety cases documented above. It also verifies rejected imports preserve the current dataset. All 22 cases passed; see [`scraper-security-2026-10-27.json`](scraper-security-2026-10-27.json). These are API boundary checks; backend parser/transport unit tests cover redirects, body bounds, deadlines and connection-target validation.
+The Google Play-only release tested 22 malformed or unsupported URLs, including other platforms, fragments, and alternate app paths. Those platform/path restrictions were removed by the public-URL release; the current `scraper-security.cjs` checks 31 URL/cache safety cases. It also verifies rejected imports preserve the current dataset. All 22 historical cases passed; see [`scraper-security-2026-10-27.json`](scraper-security-2026-10-27.json). These are API boundary checks; backend parser/transport unit tests cover redirects, body bounds, deadlines and connection-target validation.
 
 ```sh
 NODE_PATH=/tmp/reviq-browser-tests/node_modules \

@@ -122,6 +122,50 @@ class ReviewPageParserTest {
         assertTrue(result.warnings.any { it.contains("embedded review widget") })
     }
 
+    @Test fun `provider Trustpilot blocks require rating title body and explicit date boundaries`() {
+        val result = ReviewPageParser.parseProvider(fixture("trustpilot-provider-page.html"), trustpilot)
+        assertEquals("Fixture Butcher", result.entity)
+        assertEquals("Trustpilot", result.platform)
+        assertEquals(2, result.rows.size)
+        assertEquals("The packaging was intact & tidy.\nThe parcel arrived on time.\nI would order again.", result.rows[0]["text"])
+        assertEquals("4", result.rows[0]["rating"])
+        assertEquals("2026-10-24", result.rows[0]["date"])
+        assertEquals("", result.rows[0]["author"])
+        assertEquals(trustpilot, result.rows[0]["source_url"])
+        assertEquals("Wonderful!", result.rows[1]["text"])
+        assertEquals("2026-10-25", result.rows[1]["date"])
+        assertTrue(result.warnings.any { it.contains("dates of experience") && it.contains("not publication dates") })
+        assertTrue(result.warnings.any { it.contains("title as the review text") })
+        assertFalse(result.rows.any { it["text"]!!.contains("company reply") || it["text"]!!.contains("Never import") || it["text"]!!.contains("Policy") })
+    }
+
+    @Test fun `provider lightweight parsing is limited to Trustpilot and is never applied to direct pages`() {
+        val html = fixture("trustpilot-provider-page.html")
+        assertEquals("scrape_no_reviews", assertThrows(ApiError::class.java) { ReviewPageParser.parse(html, trustpilot) }.code)
+        assertEquals("scrape_no_reviews", assertThrows(ApiError::class.java) { ReviewPageParser.parseProvider(html, "https://shop.example/review/product") }.code)
+        assertEquals("scrape_no_reviews", assertThrows(ApiError::class.java) { ReviewPageParser.parseProvider(html, "https://www.trustpilot.com/categories/meat") }.code)
+    }
+
+    @Test fun `provider incomplete records invalid dates or ambiguous sections reject the whole import`() {
+        val html = fixture("trustpilot-provider-page.html")
+        val malformed = listOf(
+            html.replace("<p>Date of experience: October 24, 2026</p>", ""),
+            html.replace("<p>Date of experience: October 25, 2026</p>", ""),
+            html.replace("October 24, 2026", "October 45, 2026"),
+            html.replace("<h2>Useful product</h2>", "<p>Missing title boundary</p>"),
+            html.replace("<p>The packaging was intact &amp; tidy.</p>", "<h3>Reply from the business</h3><p>Company response.</p>"),
+            html.replace("<h3>Is this your company?</h3>", "<h2>All reviews</h2><h3>Is this your company?</h3>")
+        )
+        for (page in malformed) assertEquals("scrape_ambiguous_reviews", assertThrows(ApiError::class.java) { ReviewPageParser.parseProvider(page, trustpilot) }.code)
+    }
+
+    @Test fun `provider TrustScore marketing and prose without review markers are never imported`() {
+        val html = """<h1>Fixture Butcher Reviews 1</h1><h2>All reviews</h2><p><img alt="TrustScore 5 out of 5"></p><h2>A marketing claim</h2><p>Our product is excellent.</p><p>Date of experience: October 24, 2026</p>"""
+        assertEquals("scrape_no_reviews", assertThrows(ApiError::class.java) { ReviewPageParser.parseProvider(html, trustpilot) }.code)
+        val prose = "<h1>Fixture Butcher Reviews 1</h1><p>The product is excellent.</p>"
+        assertEquals("scrape_no_reviews", assertThrows(ApiError::class.java) { ReviewPageParser.parseProvider(prose, trustpilot) }.code)
+    }
+
     @Test fun `Google Play keeps existing parser and platform metadata`() {
         val result = ReviewPageParser.parse(fixture("google-play-page.html"), GooglePlayScraper.EXAMPLE)
         assertEquals("Google Play", result.platform)

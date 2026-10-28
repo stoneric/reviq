@@ -19,7 +19,10 @@ import java.util.concurrent.atomic.AtomicReference
 
 fun main() {
     val store = Store(); val analyst = Analyst(); val exa=ExaContentsClient()
-    val scraper=ReviewScraper(exaFetcher=if(exa.enabled) ExaPageFetcher(exa::fetch) else null,reserveExa=store::reserveExa,reconcileExa=store::reconcile)
+    val scraper=ReviewScraper(
+        exaFetcher=if(exa.enabled) ExaPageFetcher { url,deadline,cancelled,call -> exa.fetch(url,deadline,cancelled,call) } else null,
+        exaCachedFetcher=if(exa.enabled) ExaPageFetcher { url,deadline,cancelled,call -> exa.fetch(url,deadline,cancelled,call,cacheOnly=true) } else null,
+        reserveExa=store::reserveExa,reconcileExa=store::reconcile)
     val vertx = Vertx.vertx(VertxOptions().setWorkerPoolSize(12).setMaxWorkerExecuteTime(90_000_000_000))
     val router = Router.router(vertx)
     val origin = System.getenv("PUBLIC_ORIGIN") ?: System.getenv("APP_ORIGIN") ?: "https://reviq.xyz"
@@ -54,9 +57,13 @@ fun main() {
         val body = body(ctx)
         store.reserve("ingest",session(ctx),ip(ctx))
         val type = body.path("type").asText("")
+        val cacheOption=body.get("cache_only")
+        if(cacheOption!=null && !cacheOption.isBoolean) throw ApiError(400,"invalid_cache_mode","Choose fresh retrieval or a cached snapshot.")
+        val cacheOnly=cacheOption?.asBoolean() ?: false
+        if(cacheOnly && type!="url") throw ApiError(400,"invalid_cache_mode","Cached snapshots are available only for URL imports.")
         val cancelled=AtomicBoolean(false)
         ctx.response().closeHandler { cancelled.set(true) }
-        val data=if(type=="url") scraper.scrape(body.path("url").asText(""),cancelled) else Normalize.ingest(type,body.path("entity").asText(body.path("entity_name").asText("")),body.path("platform").asText(""),body.path("content").asText(""),body.path("url").takeUnless { it.isMissingNode || it.isNull }?.asText())
+        val data=if(type=="url") scraper.scrape(body.path("url").asText(""),cancelled,cacheOnly) else Normalize.ingest(type,body.path("entity").asText(body.path("entity_name").asText("")),body.path("platform").asText(""),body.path("content").asText(""),body.path("url").takeUnless { it.isMissingNode || it.isNull }?.asText())
         if(cancelled.get()) throw ApiError(499,"cancelled","Import stopped.")
         store.replace(session(ctx),data); json(ctx,data)
     } },false)

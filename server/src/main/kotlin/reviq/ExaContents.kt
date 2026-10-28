@@ -16,7 +16,7 @@ internal data class ExaPage(val html: String, val url: String, val requestId: St
 internal class ExaContentsClient(apiKey: String = System.getenv("EXA_API_KEY").orEmpty()) {
     private val key=apiKey.trim()
     val enabled: Boolean = key.isNotEmpty()
-    fun fetch(url: String, deadline: Long, cancelled: AtomicBoolean, activeCall: AtomicReference<Call?>): ExaPage {
+    fun fetch(url: String, deadline: Long, cancelled: AtomicBoolean, activeCall: AtomicReference<Call?>, cacheOnly: Boolean = false): ExaPage {
         if(!enabled) throw ApiError(503,"exa_not_configured","Enhanced page retrieval is not configured. Use CSV upload or paste.")
         if(key.any { it.isISOControl() || it.isWhitespace() }) throw ApiError(503,"exa_credentials_invalid","The retrieval provider configuration is invalid. Use CSV upload or paste.")
         checkActive(deadline,cancelled)
@@ -31,7 +31,7 @@ internal class ExaContentsClient(apiKey: String = System.getenv("EXA_API_KEY").o
             throw ApiError(422,"exa_source_unavailable","The source could not be verified as a public destination. Use CSV upload or paste.")
         }
         checkActive(deadline,cancelled)
-        val body=requestBody(canonical,TimeUnit.NANOSECONDS.toMillis(PublicPageFetcher.remaining(deadline)))
+        val body=requestBody(canonical,TimeUnit.NANOSECONDS.toMillis(PublicPageFetcher.remaining(deadline)),cacheOnly)
         // Fixed provider endpoint, checked connector DNS, no proxy, redirects, or retries.
         val client=PublicPageFetcher.client(deadline,"api.exa.ai")
         try {
@@ -52,7 +52,7 @@ internal class ExaContentsClient(apiKey: String = System.getenv("EXA_API_KEY").o
                     throw e
                 }
                 checkActive(deadline,cancelled)
-                val page=parseResponse(bytes.toString(Charsets.UTF_8),canonical)
+                val page=parseResponse(bytes.toString(Charsets.UTF_8),canonical,cacheOnly)
                 checkActive(deadline,cancelled)
                 return page
             }
@@ -71,17 +71,17 @@ internal class ExaContentsClient(apiKey: String = System.getenv("EXA_API_KEY").o
         const val MAX_RESPONSE_BYTES=2*1024*1024
         const val MAX_TEXT_CHARACTERS=200000
         private const val PARSE_MARGIN_MS=1500L
-        internal fun requestBody(url: String, remainingMillis: Long): String {
+        internal fun requestBody(url: String, remainingMillis: Long, cacheOnly: Boolean = false): String {
             val canonical=ReviewScraper.canonicalUrl(url)
             val crawlMillis=minOf(12000L,remainingMillis-PARSE_MARGIN_MS)
-            if(crawlMillis<500) throw ApiError(504,"exa_timeout","Too little time remains for fresh page retrieval. Use CSV upload or paste.")
+            if(crawlMillis<500) throw ApiError(504,"exa_timeout","Too little time remains for page retrieval. Use CSV upload or paste.")
             return mapper.writeValueAsString(mapOf(
                 "urls" to listOf(canonical),
                 "text" to mapOf("includeHtmlTags" to true,"verbosity" to "full","maxCharacters" to MAX_TEXT_CHARACTERS),
-                "maxAgeHours" to 0,"livecrawlTimeout" to crawlMillis,"subpages" to 0
+                "maxAgeHours" to if(cacheOnly) -1 else 0,"livecrawlTimeout" to crawlMillis,"subpages" to 0
             ))
         }
-        internal fun parseResponse(json: String, requestedUrl: String): ExaPage {
+        internal fun parseResponse(json: String, requestedUrl: String, cacheOnly: Boolean = false): ExaPage {
             if(json.toByteArray(Charsets.UTF_8).size>MAX_RESPONSE_BYTES) throw ApiError(413,"exa_body_limit","The provider response exceeded the size limit. No partial extraction was analyzed.")
             val root=try { mapper.readTree(json) } catch(_: Exception) { throw invalidResponse() }
             if(root==null || !root.isObject) throw invalidResponse()
@@ -91,8 +91,17 @@ internal class ExaContentsClient(apiKey: String = System.getenv("EXA_API_KEY").o
             if(!statuses.isArray || statuses.size()!=1) throw invalidResponse()
             val status=statuses[0]
             if(canonical(status.path("id"))!=requested) throw ApiError(502,"exa_source_mismatch","The provider response could not be matched to the requested source. No reviews were imported.")
-            if(status.path("status").asText()!="success") throw ApiError(422,"exa_source_unavailable","The retrieval provider could not access this page. Use CSV upload or paste.")
-            if(status.path("source").asText()!="crawled") throw ApiError(422,"exa_not_fresh","The provider did not confirm freshly retrieved content. Cached content was not imported; use CSV upload or paste.")
+            if(status.path("status").asText()!="success") {
+                if(cacheOnly) throw ApiError(422,"exa_cache_unavailable","The provider has no usable cached snapshot for this page. Try fresh retrieval, upload a CSV file, or paste reviews.")
+                val error=status.path("error")
+                if(error.path("httpStatusCode").asInt()==403 || error.path("tag").asText()=="CRAWL_HTTP_403") {
+                    throw ApiError(422,"exa_fresh_blocked","The provider could not retrieve a fresh copy because the source blocked access. You may explicitly try a cached snapshot, upload a CSV file, or paste reviews.")
+                }
+                throw ApiError(422,"exa_source_unavailable","The retrieval provider could not retrieve a fresh copy of this page. Use CSV upload or paste.")
+            }
+            val freshness=status.path("source").asText()
+            if(cacheOnly && freshness!="cached") throw ApiError(422,"exa_not_cached","The provider did not confirm a cached snapshot. No reviews were imported; try fresh retrieval, upload a CSV file, or paste reviews.")
+            if(!cacheOnly && freshness!="crawled") throw ApiError(422,"exa_not_fresh","The provider did not confirm freshly retrieved content. Cached content was not imported; use CSV upload or paste.")
             val results=root.path("results")
             if(!results.isArray || results.size()!=1) throw invalidResponse()
             val result=results[0]
@@ -108,7 +117,7 @@ internal class ExaContentsClient(apiKey: String = System.getenv("EXA_API_KEY").o
                 costNode.asDouble().also { if(!it.isFinite() || it<0) throw invalidResponse() }
             }
             val requestId=root.path("requestId").takeIf { it.isTextual }?.asText()?.takeIf { Regex("[A-Za-z0-9_-]{1,128}").matches(it) }
-            return ExaPage(text,source ?: throw invalidResponse(),requestId,"crawled",cost)
+            return ExaPage(text,source ?: throw invalidResponse(),requestId,freshness,cost)
         }
         private fun invalidResponse()=ApiError(502,"exa_invalid_response","The provider returned an invalid response. No reviews were imported; use CSV upload or paste.")
         private fun httpFailure(status: Int): ApiError = when(status) {

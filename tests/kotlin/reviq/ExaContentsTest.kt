@@ -8,9 +8,9 @@ import java.util.concurrent.atomic.AtomicReference
 
 class ExaContentsTest {
     private val url="https://www.trustpilot.com/review/fixture.example"
-    private fun response(status: String="success",source: String="crawled",resultUrl: String=url,statusId: String=url,text: String="<article><p>Original fixture review.</p></article>",cost: Any?=0.001): String = mapper.writeValueAsString(mapOf(
+    private fun response(status: String="success",source: String="crawled",resultUrl: String=url,statusId: String=url,text: String="<article><p>Original fixture review.</p></article>",cost: Any?=0.001,error: Map<String,Any>?=null): String = mapper.writeValueAsString(mapOf(
         "requestId" to "fixture-request-id",
-        "statuses" to listOf(mapOf("id" to statusId,"status" to status,"source" to source)),
+        "statuses" to listOf(mapOf("id" to statusId,"status" to status,"source" to source,"error" to error)),
         "results" to listOf(mapOf("url" to resultUrl,"text" to text,"publishedDate" to "2001-01-01")),
         "costDollars" to mapOf("total" to cost)
     ))
@@ -34,6 +34,31 @@ class ExaContentsTest {
         assertEquals("fixture-request-id",page.requestId); assertEquals(0.001,page.costUsd)
         assertNull(ExaContentsClient.parseResponse(response(cost=null),url).costUsd)
     }
+    @Test fun cacheOnlyRequiresExplicitRequestAndConfirmedCachedSource() {
+        val request=mapper.readTree(ExaContentsClient.requestBody(url,15000,cacheOnly=true))
+        assertEquals(-1,request.path("maxAgeHours").asInt())
+        assertEquals(0,request.path("subpages").asInt())
+        assertEquals(200000,request.path("text").path("maxCharacters").asInt())
+        assertFalse(request.has("livecrawl")); assertFalse(request.has("summary")); assertFalse(request.has("highlights"))
+        val html="<p>Original cached fixture, capture date unknown.</p>"
+        val page=ExaContentsClient.parseResponse(response(source="cached",text=html),url,cacheOnly=true)
+        assertEquals(html,page.html); assertEquals(url,page.url); assertEquals("cached",page.freshness)
+        assertEquals(0.001,page.costUsd)
+        assertEquals("exa_not_fresh",assertThrows(ApiError::class.java) { ExaContentsClient.parseResponse(response(source="cached"),url) }.code)
+        listOf("crawled","","unknown").forEach { source ->
+            assertEquals("exa_not_cached",assertThrows(ApiError::class.java) { ExaContentsClient.parseResponse(response(source=source),url,cacheOnly=true) }.code)
+        }
+    }
+    @Test fun freshBlockedAndMissingCacheHaveDistinctSanitizedErrors() {
+        val blocked=response(status="error",source="",error=mapOf("httpStatusCode" to 403,"tag" to "CRAWL_HTTP_403","message" to "private provider diagnostic"))
+        val fresh=assertThrows(ApiError::class.java) { ExaContentsClient.parseResponse(blocked,url) }
+        assertEquals("exa_fresh_blocked",fresh.code)
+        assertTrue(fresh.message!!.contains("fresh")); assertFalse(fresh.message!!.contains("private provider diagnostic"))
+        val cached=assertThrows(ApiError::class.java) { ExaContentsClient.parseResponse(blocked,url,cacheOnly=true) }
+        assertEquals("exa_cache_unavailable",cached.code)
+        assertTrue(cached.message!!.contains("cached snapshot")); assertFalse(cached.message!!.contains("private provider diagnostic"))
+        assertEquals("exa_cache_unavailable",assertThrows(ApiError::class.java) { ExaContentsClient.parseResponse(response(status="error",source="cached"),url,cacheOnly=true) }.code)
+    }
     @Test fun perUrlFailureCachedMissingOrMismatchedSourcesNeverBecomeSuccess() {
         assertEquals("exa_source_unavailable",assertThrows(ApiError::class.java) { ExaContentsClient.parseResponse(response(status="error"),url) }.code)
         assertEquals("exa_not_fresh",assertThrows(ApiError::class.java) { ExaContentsClient.parseResponse(response(source="cached"),url) }.code)
@@ -50,6 +75,17 @@ class ExaContentsTest {
         assertEquals("exa_body_limit",assertThrows(ApiError::class.java) { ExaContentsClient.parseResponse("x".repeat(2*1024*1024+1),url) }.code)
         assertEquals("exa_invalid_response",assertThrows(ApiError::class.java) { ExaContentsClient.parseResponse("not JSON",url) }.code)
         listOf(-0.001,"not a number").forEach { bad -> assertEquals("exa_invalid_response",assertThrows(ApiError::class.java) { ExaContentsClient.parseResponse(response(cost=bad),url) }.code) }
+    }
+    @Test fun explicitCacheRetainsSourceIdentityAndContentBounds() {
+        listOf("https://another.example.com/reviews","http://127.0.0.1/","https://user:secret@www.trustpilot.com/review/fixture.example").forEach { wrong ->
+            assertEquals("exa_source_mismatch",assertThrows(ApiError::class.java) { ExaContentsClient.parseResponse(response(source="cached",resultUrl=wrong),url,cacheOnly=true) }.code)
+            assertEquals("exa_source_mismatch",assertThrows(ApiError::class.java) { ExaContentsClient.parseResponse(response(source="cached",statusId=wrong),url,cacheOnly=true) }.code)
+        }
+        assertEquals("exa_empty_content",assertThrows(ApiError::class.java) { ExaContentsClient.parseResponse(response(source="cached",text=" "),url,cacheOnly=true) }.code)
+        assertEquals("exa_text_limit",assertThrows(ApiError::class.java) { ExaContentsClient.parseResponse(response(source="cached",text="x".repeat(200000)),url,cacheOnly=true) }.code)
+        assertEquals("exa_body_limit",assertThrows(ApiError::class.java) { ExaContentsClient.parseResponse("x".repeat(2*1024*1024+1),url,cacheOnly=true) }.code)
+        assertEquals("exa_invalid_response",assertThrows(ApiError::class.java) { ExaContentsClient.parseResponse("not JSON",url,cacheOnly=true) }.code)
+        assertEquals("exa_invalid_response",assertThrows(ApiError::class.java) { ExaContentsClient.parseResponse(response(source="cached",cost=-1),url,cacheOnly=true) }.code)
     }
     @Test fun missingCredentialsCancellationAndUnsafeTargetsDoNotMakeNetworkRequests() {
         assertFalse(ExaContentsClient("").enabled)

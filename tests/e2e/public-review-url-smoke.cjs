@@ -110,7 +110,7 @@ const jsonResponse=async response=>{assert.match(response.headers()['content-typ
     Object.assign(outcome,{outcome:'imported',platform:data.platform,retrieval_provider:provider,entity:data.entity_name,source_url:data.source_url,captured_at:data.captured_at,review_count:data.reviews.length,dated_review_count:dates.length,date_range:{from:data.summary.date_from,to:data.summary.date_to},pages:data.summary.pages,stopping_reason:data.summary.stopping_reason});
    }else{
     assert.ok([413,422,503,504].includes(response.status()),`Unexpected source failure HTTP${response.status()}`);
-    assert.match(data.error?.code||'',/^scrape_/);
+    assert.match(data.error?.code||'',/^(?:scrape_[a-z_]+|exa_fresh_blocked|exa_source_unavailable)$/);
     await page.getByRole('button',{name:'Upload CSV instead'}).waitFor();
     await page.getByRole('button',{name:'Paste reviews instead'}).waitFor();
     assert.equal((await jsonResponse(await context.request.get('/api/session'))).dataset?.id||null,active?.id||null,'Failed import must preserve the active dataset');

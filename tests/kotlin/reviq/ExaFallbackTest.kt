@@ -64,4 +64,34 @@ class ExaFallbackTest {
         val scraper=ReviewScraper(blocked(),timeoutMillis=100,exaFetcher=ExaPageFetcher { _,_,_,_ -> error("Provider must not be called") },reserveExa={ error("Budget must not be reserved") })
         assertEquals("scrape_timeout",assertThrows(ApiError::class.java) { scraper.scrape(url) }.code)
     }
+
+    @Test fun `explicit cached import is labeled and never invents a capture timestamp`() {
+        val events=mutableListOf<String>()
+        val cached=ExaPageFetcher { target,_,_,_ -> events+="cache"; ExaPage(html,target,"cached-fixture","cached",0.001) }
+        val scraper=ReviewScraper(PageFetcher { _,_,_,_ -> error("Explicit cache mode must not crawl the source") },exaCachedFetcher=cached,reserveExa={ events+="reserve"; "reservation" },reconcileExa={ _,_ -> events+="reconcile" })
+        val data=scraper.scrape(url,cacheOnly=true)
+        assertEquals(listOf("reserve","cache","reconcile"),events)
+        assertEquals("cached",data.retrieval_freshness); assertEquals("exa",data.retrieval_provider)
+        assertNull(data.captured_at); assertNotNull(data.retrieved_at)
+        assertEquals("cached_page_sample",data.summary.stopping_reason)
+        assertTrue(data.summary.warnings.any { it.contains("capture date is unknown") && it.contains("not a live scrape") })
+        assertEquals("Original customer wording.",data.reviews.single().text)
+    }
+
+    @Test fun `fresh failure never silently imports an available cached copy`() {
+        val scraper=ReviewScraper(blocked(),exaFetcher=ExaPageFetcher { _,_,_,_ -> throw ApiError(422,"exa_fresh_blocked","Fresh content blocked") },exaCachedFetcher=ExaPageFetcher { _,_,_,_ -> error("Cache mode must be explicit") },reserveExa={ "reservation" })
+        assertEquals("exa_fresh_blocked",assertThrows(ApiError::class.java) { scraper.scrape(url) }.code)
+    }
+
+    @Test fun `cached requests require a configured provider and safe target`() {
+        val scraper=ReviewScraper(PageFetcher { _,_,_,_ -> error("No source request expected") })
+        assertEquals("exa_not_configured",assertThrows(ApiError::class.java) { scraper.scrape(url,cacheOnly=true) }.code)
+        assertEquals("unsupported_url",assertThrows(ApiError::class.java) { scraper.scrape("http://127.0.0.1/",cacheOnly=true) }.code)
+    }
+
+    @Test fun `freshness mismatch cannot finalize a provider dataset`() {
+        val wrong=ExaPageFetcher { target,_,_,_ -> ExaPage(html,target,null,"cached",0.001) }
+        val scraper=ReviewScraper(blocked(),exaFetcher=wrong,reserveExa={ "reservation" })
+        assertEquals("exa_freshness_mismatch",assertThrows(ApiError::class.java) { scraper.scrape(url) }.code)
+    }
 }

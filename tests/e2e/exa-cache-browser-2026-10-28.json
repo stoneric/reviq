@@ -1,0 +1,51 @@
+{
+  "run_at": "2026-10-28T02:05:06.942Z",
+  "base_url": "http://127.0.0.1:8089",
+  "hosted_smoke": false,
+  "passed": true,
+  "model_calls": 0,
+  "seed_imports": 1,
+  "url_import_requests": 2,
+  "outcomes": [
+    {
+      "mode": "fresh",
+      "status": 422,
+      "duration_ms": 1030,
+      "error_code": "exa_fresh_blocked",
+      "outcome": "source_blocked",
+      "prior_dataset_preserved": true,
+      "cached_fallback_not_automatic": true
+    },
+    {
+      "mode": "cached",
+      "status": 200,
+      "duration_ms": 197,
+      "error_code": null,
+      "outcome": "imported",
+      "platform": "Trustpilot",
+      "entity": "Allen Brothers",
+      "source_url": "https://www.trustpilot.com/review/allenbrothers.com",
+      "retrieval_provider": "exa",
+      "retrieval_freshness": "cached",
+      "retrieved_at": "2026-10-28T02:05:09.759245947Z",
+      "captured_at": null,
+      "review_count": 1,
+      "pages": {
+        "attempted": 1,
+        "fetched": 1,
+        "parsed": 1
+      },
+      "stopping_reason": "cached_page_sample"
+    }
+  ],
+  "checks": [
+    "cached import is an explicit unchecked choice and resets on URL changes",
+    "fresh blocked import preserves prior data without automatic cache fallback",
+    "explicit Exa cached import returns real reviews with exact evidence",
+    "visible cached warning is separate from collapsed provenance",
+    "unknown capture date is never replaced by retrieval time",
+    "cached freshness and timestamps persist after reload",
+    "mobile warning visible with no horizontal overflow",
+    "exactly two URL imports and zero chat requests"
+  ]
+}

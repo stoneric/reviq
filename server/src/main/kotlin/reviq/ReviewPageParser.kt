@@ -6,6 +6,9 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
 import java.time.LocalDate
+import java.time.format.DateTimeFormatterBuilder
+import java.time.format.ResolverStyle
+import java.util.Locale
 
 internal data class ParsedReviewPage(
     val entity: String,
@@ -36,6 +39,76 @@ internal object ReviewPageParser {
         visibleWidgets(doc, finalUrl, platform)?.let { return it }
         embeddedWidget(doc, finalUrl, platform)?.let { return it }
         throw ApiError(422, "scrape_no_reviews", "No identifiable customer reviews were found in the downloaded page. Reviews may require JavaScript or sign-in, or use an unsupported layout. Upload a CSV or paste the reviews instead.")
+    }
+
+    /** Provider extraction may retain semantic headings/images while removing original DOM attributes. */
+    fun parseProvider(html: String, finalUrl: String): ParsedReviewPage {
+        try { return parse(html, finalUrl) }
+        catch (error: ApiError) {
+            val host = URI(finalUrl).host.lowercase().removePrefix("www.")
+            if (error.code != "scrape_no_reviews" || (host != "trustpilot.com" && !host.endsWith(".trustpilot.com"))) throw error
+            return providerTrustpilot(Jsoup.parse(html, finalUrl), finalUrl) ?: throw error
+        }
+    }
+
+    private fun providerTrustpilot(doc: Document, url: String): ParsedReviewPage? {
+        if (!URI(url).path.startsWith("/review/")) return null
+        val heading = doc.selectFirst("h1")?.text().orEmpty()
+        val entity = Regex("^(.+?)\\s+Reviews(?:\\s+[\\d,.KkMm]+)?$").matchEntire(heading.trim())?.groupValues?.get(1)?.let(::metadata)
+            ?.takeIf { it.isNotBlank() } ?: return null
+        val blocks = doc.select("h1, h2, h3, h4, p")
+        val starts = blocks.indices.filter { blocks[it].tagName() == "h2" && blocks[it].text().trim().equals("All reviews", true) }
+        if (starts.isEmpty()) return null
+        fun ambiguous(): Nothing = throw ApiError(422, "scrape_ambiguous_reviews", "The extracted review sections have incomplete or unclear boundaries. No partial reviews were imported. Upload a CSV or paste reviews instead.")
+        if (starts.size != 1) ambiguous()
+        val footers = setOf("is this your company?", "the trustpilot experience", "company details", "contact info", "people also looked at", "choose country", "about")
+        val sectionStart = starts.single() + 1
+        val sectionEnd = (sectionStart until blocks.size).firstOrNull { index ->
+            blocks[index].tagName().startsWith("h") && blocks[index].text().trim().lowercase() in footers
+        } ?: blocks.size
+        fun rating(index: Int): String? {
+            val block = blocks[index]
+            if (block.tagName() != "p" || block.wholeText().isNotBlank()) return null
+            return block.select("img[alt]").mapNotNull { image ->
+                Regex("(?i)^Rated ([1-5]) out of 5 stars?$").matchEntire(image.attr("alt").trim())?.groupValues?.get(1)
+            }.singleOrNull()
+        }
+        val markers = (sectionStart until sectionEnd).filter { rating(it) != null }
+        if (markers.isEmpty()) return null
+        val dateFormat = DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("MMMM d, uuuu").toFormatter(Locale.ENGLISH).withResolverStyle(ResolverStyle.STRICT)
+        val rows = mutableListOf<Map<String, String>>()
+        var titleOnly = false
+        for (marker in markers.take(MAX_RECORDS)) {
+            checkInterrupted()
+            var index = marker + 1
+            while (index < sectionEnd && blocks[index].tagName() == "p" && blocks[index].wholeText().isBlank() && blocks[index].select("img").isEmpty()) index++
+            if (index >= sectionEnd || blocks[index].tagName() !in setOf("h2", "h3")) ambiguous()
+            val title = blocks[index++].wholeText()
+            if (title.isBlank() || title.trim().lowercase().startsWith("reply from")) ambiguous()
+            val paragraphs = mutableListOf<String>()
+            var experienceDate: String? = null
+            while (index < sectionEnd) {
+                checkInterrupted()
+                val block = blocks[index]
+                if (rating(index) != null || block.tagName() != "p") ambiguous()
+                val dateMatch = Regex("(?i)^Date of experience:\\s*(.+)$").matchEntire(block.text().trim())
+                if (dateMatch != null) {
+                    experienceDate = try { LocalDate.parse(dateMatch.groupValues[1], dateFormat).toString() } catch (_: Exception) { ambiguous() }
+                    break
+                }
+                if (block.text().trim().matches(Regex("(?i)^(?:Reply|Response) from\\b.*")) || block.select("img").isNotEmpty()) ambiguous()
+                val text = block.wholeText()
+                if (text.isNotBlank()) paragraphs += text
+                index++
+            }
+            if (experienceDate == null) ambiguous()
+            val text = if (paragraphs.isEmpty()) { titleOnly = true; title } else paragraphs.joinToString("\n")
+            rows += row(text, rating(marker)!!, title, experienceDate, "", url)
+        }
+        val warnings = mutableListOf("Reviews were identified from rating, title, body and date boundaries in provider-extracted Trustpilot HTML. Author names were not inferred from combined profile text.",
+            "Review dates in this extraction are the explicitly labeled dates of experience, not publication dates.")
+        if (titleOnly) warnings += "Reviews without a separate body use their published review title as the review text."
+        return ParsedReviewPage(entity, "Trustpilot", rows, warnings)
     }
 
     private fun trustpilot(doc: Document, url: String): ParsedReviewPage? {

@@ -16,7 +16,7 @@ val mapper = jacksonObjectMapper()
 class ApiError(val status: Int, val code: String, override val message: String) : RuntimeException(message)
 data class Review(val id: String, val text: String, val rating: Int? = null, val title: String? = null, val date: String? = null, val author: String? = null, val source_url: String? = null)
 data class Summary(val observed: Int, val accepted: Int, val rejected: Int, val duplicates: Int, val excluded: Int, val histogram: Map<String,Int>, val rating_count: Int, val average_rating: Double?, val missing: Map<String,Int>, val date_from: String?, val date_to: String?, val stopping_reason: String, val warnings: List<String>, val token_count: Int, val scanned_total_known: Boolean, val pages: Map<String,Any?> = mapOf("attempted" to null,"fetched" to null,"parsed" to null))
-data class Dataset(val id: String, val version: Int = 1, val entity_name: String, val platform: String, val source_url: String?, val mode: String, val captured_at: String? = null, val ingested_at: String, val expires_at: String, val reviews: List<Review>, val summary: Summary, val content_hash: String, val synthetic: Boolean = false, val retrieval_provider: String? = null)
+data class Dataset(val id: String, val version: Int = 1, val entity_name: String, val platform: String, val source_url: String?, val mode: String, val captured_at: String? = null, val ingested_at: String, val expires_at: String, val reviews: List<Review>, val summary: Summary, val content_hash: String, val synthetic: Boolean = false, val retrieval_provider: String? = null, val retrieval_freshness: String? = null, val retrieved_at: String? = null)
 data class Message(val role: String, val content: String, val citations: List<String> = emptyList(), val mode: String = "evidence")
 fun hash(text: String): String = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
 object Tokens {
@@ -44,7 +44,7 @@ object Normalize {
     }
     fun scraped(entity: String, rows: List<Map<String,String>>, sourceUrl: String, capturedAt: String, platform: String = "Google Play", warnings: List<String> = emptyList()): Dataset {
         val data=normalizeRows("scraped",metadata(entity,"Product or business name"),metadata(platform,"Source platform"),rows.take(1000),rows.size>1000,sourceUrl)
-        return data.copy(mode="scraped",captured_at=capturedAt,retrieval_provider="direct",summary=data.summary.copy(
+        return data.copy(mode="scraped",captured_at=capturedAt,retrieval_provider="direct",retrieval_freshness="live",retrieved_at=capturedAt,summary=data.summary.copy(
             stopping_reason=if(data.summary.stopping_reason=="source_exhausted") "visible_page_sample" else data.summary.stopping_reason,
             scanned_total_known=false,
             pages=mapOf("attempted" to 1,"fetched" to 1,"parsed" to 1),

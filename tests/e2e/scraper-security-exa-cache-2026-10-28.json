@@ -1,0 +1,192 @@
+{
+  "run_at": "2026-10-28T02:06:13.709Z",
+  "base_url": "http://127.0.0.1:8089",
+  "results": [
+    {
+      "name": "empty",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 5
+    },
+    {
+      "name": "scheme-relative",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 4
+    },
+    {
+      "name": "file protocol",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 5
+    },
+    {
+      "name": "FTP protocol",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 4
+    },
+    {
+      "name": "data protocol",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 4
+    },
+    {
+      "name": "script protocol",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "HTTPS loopback",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 4
+    },
+    {
+      "name": "HTTP loopback",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "localhost name",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 4
+    },
+    {
+      "name": "localhost trailing dot",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "short loopback",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 4
+    },
+    {
+      "name": "numeric loopback",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 4
+    },
+    {
+      "name": "IPv6 loopback",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 5
+    },
+    {
+      "name": "IPv4-mapped loopback",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "IPv6 private",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 6
+    },
+    {
+      "name": "IPv6 link local",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 7
+    },
+    {
+      "name": "IPv4 private 10",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 5
+    },
+    {
+      "name": "IPv4 private 172",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "IPv4 private 192",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 4
+    },
+    {
+      "name": "IPv4 link local",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 4
+    },
+    {
+      "name": "IPv4 unspecified",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "IPv4 documentation",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 4
+    },
+    {
+      "name": "embedded credentials",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "HTTP custom port",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "HTTPS custom port",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "HTTP wrong default port",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 4
+    },
+    {
+      "name": "HTTPS wrong default port",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "malformed escape",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "cache mode must be boolean",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "cached mode cannot apply to CSV",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    },
+    {
+      "name": "explicit cached mode cannot target loopback",
+      "passed": true,
+      "status": 400,
+      "duration_ms": 3
+    }
+  ]
+}

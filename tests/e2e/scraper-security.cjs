@@ -41,6 +41,28 @@ const attacks = [
       assert.equal((await(await context.get('/api/session')).json()).dataset.id,dataset.id,`${name}: rejected import must preserve active dataset`);
       results.push({name,passed:true,status:response.status(),duration_ms:Date.now()-started});
     }
+    for (const [name,payload] of [
+      ['cache mode must be boolean',{type:'url',url:'https://www.trustpilot.com/review/allenbrothers.com',cache_only:'true'}],
+      ['cached mode cannot apply to CSV',{type:'csv',entity:'Synthetic test',platform:'Synthetic',content:'text\nSynthetic input',cache_only:true}],
+    ]) {
+      const started=Date.now();
+      const response=await context.post('/api/ingest',{data:payload});
+      const value=await response.json();
+      assert.equal(response.status(),400,`${name}: expected400`);
+      assert.equal(value.error?.code,'invalid_cache_mode',`${name}: reject before retrieval`);
+      assert.equal((await(await context.get('/api/session')).json()).dataset.id,dataset.id,`${name}: rejected option must preserve active dataset`);
+      results.push({name,passed:true,status:response.status(),duration_ms:Date.now()-started});
+    }
+    {
+      const name='explicit cached mode cannot target loopback';
+      const started=Date.now();
+      const response=await context.post('/api/ingest',{data:{type:'url',url:'http://127.0.0.1/reviews',cache_only:true}});
+      const value=await response.json();
+      assert.ok([400,422].includes(response.status()),`${name}: expected400/422`);
+      assert.ok(['unsupported_url','scrape_fetch_failure','scrape_unsafe_destination'].includes(value.error?.code),`${name}: reject before provider retrieval`);
+      assert.equal((await(await context.get('/api/session')).json()).dataset.id,dataset.id,`${name}: preserve active dataset`);
+      results.push({name,passed:true,status:response.status(),duration_ms:Date.now()-started});
+    }
     const final = await (await context.get('/api/session')).json();
     assert.equal(final.dataset.id,dataset.id,'Rejected URLs preserve the active dataset');
     console.log(JSON.stringify({passed:results.length,failed:0,active_dataset_preserved:true}));

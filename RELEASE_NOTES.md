@@ -1,3 +1,30 @@
+# Reviq 1.2.0 — Exa retrieval and explicit cached snapshots
+
+Release date: 28 October 2026. Live application: https://reviq.xyz/.
+
+## What changed
+
+Exa is configured privately as Reviq's optional retrieval provider. URL imports try direct public access, then request fresh content through Exa if needed. Fresh retrieval still fails for the supplied Allen Brothers Trustpilot page: Exa reports an upstream HTTP 403.
+
+An explicit **Use cached snapshot (may be outdated)** option now allows importing Exa's existing copy. The tested Allen Brothers snapshot contains one review. It is not a current or complete review history. Cached datasets show a prominent warning, `retrieval_freshness: cached`, `captured_at: null`, and a separate retrieval timestamp. The choice defaults off and resets when the URL changes. Fresh failures never automatically switch to cached data.
+
+## Implementation history
+
+1. Verified the supplied credential and probed the real Exa Contents API. Fresh retrieval failed; cache-only retrieval succeeded. The provider supplies no original crawl timestamp.
+2. Added strict parsing for provider-extracted Trustpilot HTML using review-rating, title, body and date boundaries. Unrelated company recommendations, marketing text, replies and footer content are excluded. Original decoded review text is retained; ambiguous author text stays missing. Dates are explicitly labeled as dates of experience.
+3. Added explicit cache selection across the API and interface, with distinct freshness checks and provenance. Source URL validation, the 15-second deadline, size/review limits and separate Exa budget remain enforced.
+4. Tested the actual cached response against its original text and verified the browser import, source evidence, warnings, timestamps and persistence. Credentials and real review bodies are excluded from committed test artifacts.
+
+## Validation
+
+All **82 backend tests passed**, including PostgreSQL budget concurrency, fresh/cache response contracts, explicit cache selection, source matching, parser boundaries and existing live Google Play checks. All **14 browser regression scenarios** and **31 URL/cache security cases** passed. The frontend build passed. The private real-response parser replay matched the complete 427-character review exactly. The focused browser flow used the actual Exa service and verified one cached review, a failed fresh request that preserved prior data, visible freshness warnings, reload and mobile layout.
+
+The deployed HTTPS check passed at **02:11 UTC**: exactly two URL imports and zero chat requests. Explicit cached retrieval succeeded; the subsequent fresh request failed with `exa_fresh_blocked` and preserved the cached dataset. Exact evidence, the visible unknown-age notice, timestamps, reload and mobile layout passed. See `tests/e2e/exa-cache-hosted-2026-10-28.json`.
+
+Fresh Trustpilot scraping remains unavailable through the current providers. Cached retrieval is a separate, clearly labeled user choice; other sources can also fail when neither accessible review markup nor a usable cached copy is available.
+
+---
+
 # Reviq 1.1.0 — public review URL imports
 
 Release date: 28 October 2026. Live application: https://reviq.xyz/.
