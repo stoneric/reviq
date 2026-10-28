@@ -1,3 +1,37 @@
+# Reviq 1.1.0 — public review URL imports
+
+Release date: 28 October 2026. Live application: https://reviq.xyz/.
+
+## What changed
+
+URL imports now accept public HTTP and HTTPS review pages across domains. Trustpilot and Google Play have dedicated parsers; other pages can expose reviews through schema.org JSON-LD, microdata, WooCommerce, Judge.me or Amazon-style review cards. Original review text, source URLs, capture times and explicit sample limits carry through to the existing PostgreSQL workspace and cited analysis.
+
+The URL field no longer restricts users to Google Play app links. It accepts ordinary query parameters and section anchors, follows up to three validated redirects, and records the final source URL. Every destination is checked for public network addresses at connection time. The existing concurrency, deadline, body-size and review/token limits remain enforced. Failed imports preserve the prior dataset.
+
+## Implementation history
+
+1. Generalized URL validation and fetching while preserving the tested Google Play adapter.
+2. Added explicit review-record extraction for Trustpilot, schema.org and common review widgets. Unrelated article text and ambiguous multi-product review groups are not imported as customer reviews.
+3. Generalized product/business metadata, source platform, source links and provenance warnings.
+4. Updated the URL form, help text and recovery flow; added parser, redirect, DNS and browser regression coverage.
+5. Prepared an optional Exa Contents fallback for blocked or unreadable pages. It requests fresh text only, validates source identity and per-URL status, records provider provenance, and shares the original import deadline. A separate atomic PostgreSQL budget defaults to $0.10/day with at most 100 calls/day. Credentials are not configured and live Exa compatibility has not been verified; the adapter is inactive until enabled with a server-side key.
+
+## Validation
+
+The final build passed **71/71 backend tests** with no skips, including actual PostgreSQL concurrency/budget tests, real Google Play captures, arbitrary-URL/redirect/DNS checks, parser fixtures, and Exa contract/fallback checks. Exa tests use synthetic provider responses and make no live Exa calls. The frontend build passed.
+
+The isolated browser suite passed **14/14** scenarios and the expanded URL-security suite passed **28/28** cases. A real Anker product page supplied five reviews with exact source text, source links, fresh capture metadata, provider provenance and reload persistence. The supplied Trustpilot page exercised a blocked-source recovery path and preserved the prior dataset; it was not counted as a successful import. These checks made no model calls. Dated reports are in `tests/`.
+
+The final public HTTPS walkthrough also passed with exactly two URL imports: Anker succeeded, then the blocked Trustpilot request preserved that dataset. Exact evidence, dates, direct-fetch provenance and reload were verified. See `tests/e2e/review-url-hosted-2026-10-28.json`.
+
+## Source-access limitation
+
+The requested `https://www.trustpilot.com/review/allenbrothers.com` page returned HTTP 403 from this server in both direct HTTP and ordinary Chromium checks. The Trustpilot parser is implemented, but this URL is not claimed as a successful live import. It needs an authorized data-access provider or an export. No proxy service or provider credential is configured by this release.
+
+A public URL is accepted for an import attempt; that does not make every website fetchable or its markup recognizable. One review page is sampled. JavaScript-only pages, access challenges and login-required content may need CSV or pasted reviews. Arbitrary page prose is never substituted for review evidence.
+
+---
+
 # Reviq 1.0.0 — review intelligence with traceable evidence
 
 Implementation history: 27–28 October 2026. Live application: https://reviq.xyz/. Source: https://github.com/stoneric/reviq.

@@ -4,6 +4,7 @@ import okhttp3.Call
 import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.jsoup.Jsoup
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -20,9 +21,12 @@ import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
-internal data class FetchedPage(val status: Int, val body: String, val contentType: String = "text/html")
+internal data class FetchedPage(val status: Int, val body: String, val contentType: String = "text/html", val location: String? = null)
 internal fun interface PageFetcher {
     fun fetch(url: String, deadline: Long, cancelled: AtomicBoolean, activeCall: AtomicReference<Call?>): FetchedPage
+}
+internal fun interface ExaPageFetcher {
+    fun fetch(url: String, deadline: Long, cancelled: AtomicBoolean, activeCall: AtomicReference<Call?>): ExaPage
 }
 internal object ScrapeRuntime {
     private fun pool(name: String)=ThreadPoolExecutor(2,2,0,TimeUnit.SECONDS,SynchronousQueue(),ThreadFactory { task -> Thread(task,name).apply { isDaemon=true } },ThreadPoolExecutor.AbortPolicy())
@@ -32,36 +36,42 @@ internal object ScrapeRuntime {
 internal object PublicPageFetcher: PageFetcher {
     const val MAX_BODY_BYTES=2*1024*1024
     fun remaining(deadline: Long): Long = (deadline-System.nanoTime()).also { if(it<=0) throw ApiError(504,"scrape_timeout","The source did not complete within 15 seconds. Try CSV upload or pasted reviews.") }
-    fun client(deadline: Long): OkHttpClient = OkHttpClient.Builder()
+    fun checkedDns(expectedHost: String, deadline: Long, resolver: Dns = Dns.SYSTEM): Dns = object: Dns {
+        override fun lookup(host: String): List<InetAddress> {
+            if(host!=expectedHost) throw java.net.UnknownHostException("Unexpected connector host")
+            val task=try { ScrapeRuntime.dns.submit<List<InetAddress>> { resolver.lookup(host) } } catch(_: RejectedExecutionException) { throw java.net.UnknownHostException("DNS resolver is busy") }
+            val addresses=try { task.get(remaining(deadline),TimeUnit.NANOSECONDS) } finally { task.cancel(true) }
+            if(addresses.isEmpty() || addresses.any { !ReviewScraper.publicAddress(it) }) throw java.net.UnknownHostException("Destination is not public")
+            // Only these checked address objects reach OkHttp's connector. There is no second
+            // unchecked DNS lookup between validation and the actual connection.
+            return addresses.toList()
+        }
+    }
+    fun client(deadline: Long, expectedHost: String = "play.google.com"): OkHttpClient = OkHttpClient.Builder()
         .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false)
         .proxy(java.net.Proxy.NO_PROXY)
         .callTimeout(remaining(deadline),TimeUnit.NANOSECONDS)
         .connectTimeout(remaining(deadline),TimeUnit.NANOSECONDS)
         .readTimeout(remaining(deadline),TimeUnit.NANOSECONDS)
-        .dns(object: Dns { override fun lookup(host: String): List<InetAddress> {
-            if(host!="play.google.com") throw java.net.UnknownHostException("Host is not allowed")
-            val task=try { ScrapeRuntime.dns.submit<List<InetAddress>> { Dns.SYSTEM.lookup(host) } } catch(_: RejectedExecutionException) { throw java.net.UnknownHostException("DNS resolver is busy") }
-            val addresses=try { task.get(remaining(deadline),TimeUnit.NANOSECONDS) } finally { task.cancel(true) }
-            if(addresses.isEmpty() || addresses.any { !GooglePlayScraper.publicAddress(it) }) throw java.net.UnknownHostException("Destination is not public")
-            // These exact checked InetAddress values are handed to OkHttp's actual connector.
-            return addresses
-        } }).build()
+        .dns(checkedDns(expectedHost,deadline)).build()
+    fun htmlType(type: String)=type.substringBefore(';').trim().lowercase() in setOf("text/html","application/xhtml+xml")
     override fun fetch(url: String, deadline: Long, cancelled: AtomicBoolean, activeCall: AtomicReference<Call?>): FetchedPage {
         if(cancelled.get()) throw ApiError(499,"cancelled","Import stopped.")
-        val client=client(deadline)
+        val target=ReviewScraper.canonicalUrl(url).toHttpUrlOrNull() ?: throw ApiError(400,"unsupported_url","Use a public HTTP or HTTPS review page.")
+        val client=client(deadline,target.host)
         try {
-            val request=Request.Builder().url(url).header("User-Agent","Reviq/1.0 (+https://reviq.xyz)").header("Accept","text/html").build()
+            val request=Request.Builder().url(target).header("User-Agent","Reviq/1.0 (+https://reviq.xyz)").header("Accept","text/html").build()
             val call=client.newCall(request); activeCall.set(call)
             if(cancelled.get()) { call.cancel(); throw ApiError(499,"cancelled","Import stopped.") }
             call.execute().use { response ->
-                if(response.code!=200) return FetchedPage(response.code,"")
+                if(response.code!=200) return FetchedPage(response.code,"",location=response.header("Location"))
                 val type=response.header("Content-Type").orEmpty()
-                if(!type.lowercase().startsWith("text/html")) return FetchedPage(response.code,"",type)
+                if(!htmlType(type)) return FetchedPage(response.code,"",type)
                 if(response.header("Content-Encoding")!=null) throw ApiError(422,"scrape_encoding","The source returned an unsupported response encoding. Try CSV upload or paste.")
                 val body=response.body ?: throw ApiError(422,"scrape_empty","The source returned no page. Try CSV upload or paste.")
                 // OkHttp transparently decompresses gzip; this bounds the DECOMPRESSED bytes.
                 val bytes=readBounded(body.byteStream(),MAX_BODY_BYTES) { remaining(deadline); if(cancelled.get()) throw ApiError(499,"cancelled","Import stopped.") }
-                return FetchedPage(response.code,bytes.toString(Charsets.UTF_8),type)
+                return FetchedPage(response.code,bytes.toString(response.body?.contentType()?.charset(Charsets.UTF_8) ?: Charsets.UTF_8),type)
             }
         } finally { activeCall.set(null); client.connectionPool.evictAll(); client.dispatcher.executorService.shutdown() }
     }
@@ -75,25 +85,66 @@ internal object PublicPageFetcher: PageFetcher {
         return output.toByteArray()
     }
 }
-internal class GooglePlayScraper(private val fetcher: PageFetcher=PublicPageFetcher, private val timeoutMillis: Long=15000) {
+internal class ReviewScraper(
+    private val fetcher: PageFetcher=PublicPageFetcher,
+    private val timeoutMillis: Long=15000,
+    private val exaFetcher: ExaPageFetcher?=null,
+    private val reserveExa: ()->String = { throw ApiError(503,"exa_budget_unavailable","Live retrieval accounting is unavailable. Try CSV upload or paste.") },
+    private val reconcileExa: (String,Double)->Unit = { _,_ -> }
+) {
     fun scrape(rawUrl: String, cancelled: AtomicBoolean = AtomicBoolean(false)): Dataset {
         val canonical=canonicalUrl(rawUrl)
         val deadline=System.nanoTime()+TimeUnit.MILLISECONDS.toNanos(timeoutMillis)
         val activeCall=AtomicReference<Call?>(null)
         val task=try { ScrapeRuntime.jobs.submit<Dataset> {
-            val page=fetcher.fetch(canonical,deadline,cancelled,activeCall)
-            checkActive(deadline,cancelled)
-            if(page.status in 300..399) throw ApiError(422,"scrape_redirect","The source redirected this request. Redirects are not followed; use CSV upload or paste instead.")
-            if(page.status==403 || page.status==429) throw ApiError(422,"scrape_blocked","Google Play blocked or limited this request. Try CSV upload or paste; no access restrictions were bypassed.")
-            if(page.status==404) throw ApiError(422,"scrape_not_found","This app was not found in the US Google Play storefront. Check its app URL, or use CSV upload or paste.")
+            var finalUrl=canonical
+            var redirects=0
+            val visited=mutableSetOf(finalUrl)
+            try {
+              var page: FetchedPage
+              while(true) {
+                checkActive(deadline,cancelled)
+                page=fetcher.fetch(finalUrl,deadline,cancelled,activeCall)
+                checkActive(deadline,cancelled)
+                if(page.status !in setOf(301,302,303,307,308)) break
+                if(redirects>=MAX_REDIRECTS) throw ApiError(422,"scrape_redirect_limit","The source exceeded the three-redirect limit. Try a direct review-page URL, CSV upload, or paste.")
+                val location=page.location?.takeIf { it.isNotBlank() }
+                    ?: throw ApiError(422,"scrape_redirect","The source returned a redirect without a destination. Try a direct page URL, CSV upload, or paste.")
+                val resolved=finalUrl.toHttpUrlOrNull()?.resolve(location)?.toString()
+                    ?: throw ApiError(422,"scrape_redirect","The source returned an unsupported redirect. Try CSV upload or paste.")
+                finalUrl=canonicalUrl(resolved) // validate each hop before any connection
+                if(!visited.add(finalUrl)) throw ApiError(422,"scrape_redirect_loop","The source redirected in a loop. Try a direct review-page URL, CSV upload, or paste.")
+                redirects++
+            }
+            if(page.status in 300..399) throw ApiError(422,"scrape_redirect","The source returned an unsupported redirect response. Try CSV upload or paste.")
+            if(page.status==401 || page.status==403 || page.status==429) throw ApiError(422,"scrape_blocked","This source blocked, requires access, or rate-limited the request. Reviq cannot bypass verification or access controls. Try CSV upload or paste.")
+            if(page.status==404) throw ApiError(422,"scrape_not_found","The source page was not found. Check the URL, or use CSV upload or paste.")
             if(page.status!=200) throw ApiError(422,"scrape_source_error","The review source is unavailable (HTTP ${page.status}). Try CSV upload or paste.")
-            if(!page.contentType.lowercase().startsWith("text/html")) throw ApiError(422,"scrape_parse_failure","The source did not return an HTML app page. Try CSV upload or paste.")
+            if(!PublicPageFetcher.htmlType(page.contentType)) throw ApiError(422,"scrape_parse_failure","The source did not return a supported HTML page. Try CSV upload or paste.")
             val captured=Instant.now().toString()
-            val (entity,rows)=parse(page.body,canonical)
+            val parsed=ReviewPageParser.parse(page.body,finalUrl)
             checkActive(deadline,cancelled)
-            val dataset=Normalize.scraped(entity,rows,canonical,captured)
+            val normalized=Normalize.scraped(parsed.entity,parsed.rows,finalUrl,captured,parsed.platform,parsed.warnings)
+            val dataset=if(redirects==0) normalized else normalized.copy(summary=normalized.summary.copy(pages=normalized.summary.pages + ("redirects" to redirects)))
             checkActive(deadline,cancelled)
-            dataset
+              dataset
+            } catch(e: ApiError) {
+                // Only retrieval/markup failures qualify. Bad destinations, ambiguous entities,
+                // cancellation, redirects and deadlines never turn into paid provider requests.
+                if(exaFetcher==null || e.code !in setOf("scrape_blocked","scrape_no_reviews","scrape_parse_failure","scrape_body_limit","scrape_encoding")) throw e
+                checkActive(deadline,cancelled)
+                if(PublicPageFetcher.remaining(deadline)<TimeUnit.SECONDS.toNanos(2)) throw timeout()
+                val reservation=reserveExa()
+                checkActive(deadline,cancelled)
+                val supplied=exaFetcher.fetch(finalUrl,deadline,cancelled,activeCall)
+                supplied.costUsd?.let { reconcileExa(reservation,it) }
+                checkActive(deadline,cancelled)
+                val parsed=ReviewPageParser.parse(supplied.html,supplied.url)
+                val data=Normalize.scraped(parsed.entity,parsed.rows,supplied.url,Instant.now().toString(),parsed.platform,
+                    parsed.warnings + "Retrieved through Exa with a fresh-crawl request. Review text is preserved as returned by the provider; only identifiable records in that page are included.")
+                checkActive(deadline,cancelled)
+                data.copy(retrieval_provider="exa")
+            }
         } } catch(_: RejectedExecutionException) { throw ApiError(503,"scrape_busy","Two review imports are already running. Wait a moment, or use CSV upload or paste.") }
         try {
             while(true) {
@@ -116,6 +167,49 @@ internal class GooglePlayScraper(private val fetcher: PageFetcher=PublicPageFetc
         PublicPageFetcher.remaining(deadline)
         if(cancelled.get() || Thread.currentThread().isInterrupted) throw ApiError(499,"cancelled","Import stopped.")
     }
+    companion object {
+        const val MAX_REDIRECTS=3
+        fun publicAddress(address: InetAddress)=GooglePlayScraper.publicAddress(address)
+        fun canonicalUrl(value: String): String {
+            fun invalid(): Nothing=throw ApiError(400,"unsupported_url","Use a public HTTP or HTTPS review page on its standard port. Credentials, private or reserved addresses, and local destinations are not supported.")
+            if(value.length>2048 || value.isBlank()) invalid()
+            val trimmed=value.trim()
+            if(trimmed.any { it.isISOControl() } || '\\' in trimmed) invalid()
+            val uri=try { URI(trimmed) } catch(_: Exception) { invalid() }
+            if(uri.scheme?.lowercase() !in setOf("http","https") || uri.isOpaque || uri.rawAuthority.isNullOrBlank() || uri.rawUserInfo!=null || '@' in uri.rawAuthority || '%' in uri.rawAuthority) invalid()
+            val target=trimmed.toHttpUrlOrNull() ?: invalid()
+            if(target.port!=(if(target.scheme=="https") 443 else 80) || target.username.isNotEmpty() || target.password.isNotEmpty()) invalid()
+            val host=target.host.lowercase()
+            if(host.endsWith('.') || host.isBlank()) invalid()
+            if(':' in host) {
+                // A colon here denotes an IPv6 literal parsed by HttpUrl, never a DNS name.
+                val address=try { InetAddress.getByName(host) } catch(_: Exception) { invalid() }
+                if(!publicAddress(address)) invalid()
+            } else if(host.all { it.isDigit() || it=='.' }) {
+                val parts=host.split('.')
+                if(parts.size!=4 || parts.any { it.isEmpty() || (it.length>1 && it[0]=='0') || it.toIntOrNull()?.let { number -> number in 0..255 }!=true }) invalid()
+                val address=InetAddress.getByAddress(parts.map { it.toInt().toByte() }.toByteArray())
+                if(!publicAddress(address)) invalid()
+            } else {
+                // Single labels, numeric TLDs and alternative numeric IP encodings can resolve
+                // as local/numeric addresses on some platforms; never send them to the resolver.
+                if('.' !in host || !host.substringAfterLast('.').any { it in 'a'..'z' }) invalid()
+                if(host.split('.').any { !Regex("[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?").matches(it) }) invalid()
+                if(host=="localhost" || listOf(".localhost",".local",".internal",".lan",".home",".invalid",".test").any { host.endsWith(it) }) invalid()
+            }
+            val canonical=target.newBuilder().fragment(null).build().toString()
+            // Preserve the established English/US Google Play adapter for ordinary app URLs.
+            if(host=="play.google.com" && target.encodedPath=="/store/apps/details") {
+                try { return GooglePlayScraper.canonicalUrl(canonical) } catch(_: ApiError) { /* generic public URL remains valid */ }
+            }
+            return canonical
+        }
+    }
+}
+
+// Retained compatibility wrapper and proven Google Play parser for existing callers/fixtures.
+internal class GooglePlayScraper(private val fetcher: PageFetcher=PublicPageFetcher, private val timeoutMillis: Long=15000) {
+    fun scrape(rawUrl: String, cancelled: AtomicBoolean=AtomicBoolean(false)): Dataset = ReviewScraper(fetcher,timeoutMillis).scrape(canonicalUrl(rawUrl),cancelled)
     companion object {
         const val EXAMPLE="https://play.google.com/store/apps/details?id=com.spotify.music"
         fun canonicalUrl(value: String): String {

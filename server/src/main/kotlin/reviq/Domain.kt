@@ -16,7 +16,7 @@ val mapper = jacksonObjectMapper()
 class ApiError(val status: Int, val code: String, override val message: String) : RuntimeException(message)
 data class Review(val id: String, val text: String, val rating: Int? = null, val title: String? = null, val date: String? = null, val author: String? = null, val source_url: String? = null)
 data class Summary(val observed: Int, val accepted: Int, val rejected: Int, val duplicates: Int, val excluded: Int, val histogram: Map<String,Int>, val rating_count: Int, val average_rating: Double?, val missing: Map<String,Int>, val date_from: String?, val date_to: String?, val stopping_reason: String, val warnings: List<String>, val token_count: Int, val scanned_total_known: Boolean, val pages: Map<String,Any?> = mapOf("attempted" to null,"fetched" to null,"parsed" to null))
-data class Dataset(val id: String, val version: Int = 1, val entity_name: String, val platform: String, val source_url: String?, val mode: String, val captured_at: String? = null, val ingested_at: String, val expires_at: String, val reviews: List<Review>, val summary: Summary, val content_hash: String, val synthetic: Boolean = false)
+data class Dataset(val id: String, val version: Int = 1, val entity_name: String, val platform: String, val source_url: String?, val mode: String, val captured_at: String? = null, val ingested_at: String, val expires_at: String, val reviews: List<Review>, val summary: Summary, val content_hash: String, val synthetic: Boolean = false, val retrieval_provider: String? = null)
 data class Message(val role: String, val content: String, val citations: List<String> = emptyList(), val mode: String = "evidence")
 fun hash(text: String): String = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
 object Tokens {
@@ -24,7 +24,7 @@ object Tokens {
     fun count(value: String): Int = encoding.countTokens(value)
 }
 fun safeUrl(raw: String?): String? = raw?.trim()?.takeIf { it.isNotBlank() && it.length <= 2048 }?.let {
-    try { val u = URI(it); if (u.scheme == "https" && !u.host.isNullOrBlank() && u.rawUserInfo == null && (u.port == -1 || u.port == 443)) it else null } catch (_: Exception) { null }
+    try { val u = URI(it); val defaultPort=when(u.scheme) { "https" -> 443; "http" -> 80; else -> null }; if (defaultPort!=null && !u.host.isNullOrBlank() && u.rawUserInfo == null && (u.port == -1 || u.port == defaultPort)) it else null } catch (_: Exception) { null }
 }
 object Normalize {
     const val MAX_BYTES = 1048576
@@ -34,7 +34,7 @@ object Normalize {
         if (type !in setOf("csv","paste","demo")) throw ApiError(400,"invalid_type","Choose CSV, paste, or example data.")
         val entityName = if (type == "demo") "Northstar Headphones" else metadata(entity, "Entity name")
         val source = if (type == "demo") "Synthetic example" else metadata(platform, "Source declaration")
-        if (!url.isNullOrBlank() && safeUrl(url) == null) throw ApiError(400,"invalid_url","Source links must be valid HTTPS URLs without credentials.")
+        if (!url.isNullOrBlank() && safeUrl(url) == null) throw ApiError(400,"invalid_url","Source links must be valid HTTP or HTTPS URLs without credentials or custom ports.")
         val (rows, cutoff) = when(type) {
             "csv" -> csv(content)
             "paste" -> { val all = content.replace("\r\n","\n").split(Regex("\n[\\t ]*\n+")).filter { it.isNotBlank() }; all.take(1000).map { mapOf("text" to it) } to (all.size > 1000) }
@@ -42,13 +42,13 @@ object Normalize {
         }
         return normalizeRows(type,entityName,source,rows,cutoff,url)
     }
-    fun scraped(entity: String, rows: List<Map<String,String>>, sourceUrl: String, capturedAt: String): Dataset {
-        val data=normalizeRows("scraped",metadata(entity,"App name"),"Google Play",rows.take(1000),rows.size>1000,sourceUrl)
-        return data.copy(mode="scraped",captured_at=capturedAt,summary=data.summary.copy(
+    fun scraped(entity: String, rows: List<Map<String,String>>, sourceUrl: String, capturedAt: String, platform: String = "Google Play", warnings: List<String> = emptyList()): Dataset {
+        val data=normalizeRows("scraped",metadata(entity,"Product or business name"),metadata(platform,"Source platform"),rows.take(1000),rows.size>1000,sourceUrl)
+        return data.copy(mode="scraped",captured_at=capturedAt,retrieval_provider="direct",summary=data.summary.copy(
             stopping_reason=if(data.summary.stopping_reason=="source_exhausted") "visible_page_sample" else data.summary.stopping_reason,
             scanned_total_known=false,
             pages=mapOf("attempted" to 1,"fetched" to 1,"parsed" to 1),
-            warnings=data.summary.warnings + "Only reviews visible on the public Google Play app page were captured (English, US storefront). This is a small, selected sample; the total unseen review count is unknown. No review pagination was attempted."
+            warnings=(data.summary.warnings + warnings + "Only identifiable reviews in the fetched public page were captured. This is a selected sample; the total unseen review count is unknown. No review pagination was attempted.").distinct()
         ))
     }
     private fun normalizeRows(type: String, entityName: String, source: String, rows: List<Map<String,String>>, cutoff: Boolean, url: String?): Dataset {
@@ -87,7 +87,7 @@ object Normalize {
         if (oversizedFields > 0) warnings += "$oversizedFields oversized optional fields were stored as missing."
         if (cutoff) warnings += "Scanning stopped at 1,000 records; the unseen total is unknown."
         if (type == "demo") warnings += "Synthetic example reviews for demonstration; these are not real customer reviews."
-        else if(type=="scraped") warnings += "App name and review fields were extracted from the fetched public source page. Findings apply only to the captured sample."
+        else if(type=="scraped") warnings += "Product or business name and review fields were extracted from the fetched public source page. Findings apply only to the captured sample."
         else warnings += "Entity and source are user-declared. Findings apply only to this supplied sample."
         val ratings = accepted.mapNotNull { it.rating }; val dates = accepted.mapNotNull { it.date }
         val missing = mapOf("text" to 0,"rating" to accepted.count { it.rating == null },"title" to accepted.count { it.title == null },"date" to accepted.count { it.date == null },"author" to accepted.count { it.author == null },"source_url" to accepted.count { it.source_url == null })

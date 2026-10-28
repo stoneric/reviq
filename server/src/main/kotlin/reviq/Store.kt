@@ -9,8 +9,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.UUID
+import java.math.BigDecimal
 
-class Store {
+class Store : AutoCloseable {
     private val pool = HikariDataSource(HikariConfig().apply {
         jdbcUrl = System.getenv("JDBC_DATABASE_URL") ?: "jdbc:postgresql://127.0.0.1:5432/reviq"
         username = System.getenv("DATABASE_USER") ?: "reviq"
@@ -79,6 +80,28 @@ class Store {
         counters.forEach { (key,_) -> execute(c,"INSERT INTO quota_counters(key,count,expires_at) VALUES(?,1,now()+interval '2 days') ON CONFLICT(key) DO UPDATE SET count=quota_counters.count+1",key) }
         request
     }
+    /** Reserve one text-only Exa retrieval before the outbound provider request. */
+    fun reserveExa(): String = reserveExa("global",System.getenv("EXA_DAILY_BUDGET_USD"))
+    // Internal scope/config injection keeps tests away from shared production/day counters.
+    internal fun reserveExa(scope: String, budgetConfig: String?): String {
+        require(Regex("[A-Za-z0-9_-]{1,80}").matches(scope))
+        val budget=if(budgetConfig==null) BigDecimal("0.10") else budgetConfig.toBigDecimalOrNull()
+        if(budget==null || budget.signum()<0 || !budget.toDouble().isFinite()) {
+            throw ApiError(503,"exa_budget_configuration","Live page retrieval is disabled because its daily budget configuration is invalid.")
+        }
+        return reserveProvider("exa",scope,budget,BigDecimal("0.002"),100)
+    }
+    private fun reserveProvider(provider: String, scope: String, budget: BigDecimal, cost: BigDecimal, maxRequests: Int): String = transaction { c ->
+        require(cost.signum()>0 && maxRequests>0)
+        c.createStatement().use { it.execute("SELECT pg_advisory_xact_lock(782391147)") }
+        val key="$provider:$scope:${LocalDate.now(ZoneOffset.UTC)}"
+        val request=UUID.randomUUID().toString()
+        execute(c,"INSERT INTO quota_counters(key,expires_at) VALUES(?,now()+interval '2 days') ON CONFLICT DO NOTHING",key)
+        val allowed=execute(c,"UPDATE quota_counters SET count=count+1,reserved_usd=reserved_usd+? WHERE key=? AND count<? AND reserved_usd+?<=?",cost,key,maxRequests,cost,budget)
+        if(allowed==0) throw ApiError(429,"${provider}_daily_budget","Today's live retrieval allowance has been reached. You can still upload CSV files or paste reviews.")
+        execute(c,"INSERT INTO cost_reservations(request_id,quota_key,amount) VALUES(?,?,?)",request,key,cost)
+        request
+    }
     fun reconcile(request: String, actualCost: Double) { transaction { c ->
         if(!actualCost.isFinite() || actualCost<0) return@transaction
         c.prepareStatement("SELECT quota_key,amount FROM cost_reservations WHERE request_id=? AND NOT reconciled FOR UPDATE").use { s ->
@@ -91,5 +114,6 @@ class Store {
         }
     } }
     fun release(session: String, request: String) { pool.connection.use { execute(it,"UPDATE anonymous_sessions SET active_until=NULL,active_request=NULL WHERE id=? AND active_request=?",session,request) } }
+    override fun close() { pool.close() }
     fun cleanup() { pool.connection.use { c -> execute(c,"DELETE FROM anonymous_sessions WHERE expires_at<now()"); execute(c,"DELETE FROM datasets WHERE expires_at<now()"); execute(c,"DELETE FROM quota_counters WHERE expires_at<now()") } }
 }

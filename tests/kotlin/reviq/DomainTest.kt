@@ -47,7 +47,15 @@ class DomainTest {
     @Test fun `unsafe links omitted while evidence stays literal`() {
         val data=Normalize.ingest("csv","Test","CSV","text,source_url\n<script>alert(1)</script>,javascript:alert(1)")
         assertNull(data.reviews[0].source_url); assertEquals("<script>alert(1)</script>",data.reviews[0].text)
-        assertNull(safeUrl("https://user:secret@example.com")); assertNull(safeUrl("http://example.com")); assertEquals("https://example.com/review",safeUrl("https://example.com/review"))
+        assertNull(safeUrl("https://user:secret@example.com")); assertNull(safeUrl("http://example.com:443")); assertNull(safeUrl("https://example.com:80")); assertEquals("http://example.com/review",safeUrl("http://example.com/review")); assertEquals("https://example.com/review",safeUrl("https://example.com/review"))
+    }
+    @Test fun `scraped source metadata and limitations follow the imported site`() {
+        val data=Normalize.scraped("Fixture business",listOf(mapOf("text" to "Original review", "source_url" to "http://reviews.example/review/one")),"http://reviews.example/business","2026-10-28T00:00:00Z","reviews.example",listOf("Structured reviews were supplied by the source page."))
+        assertEquals("reviews.example",data.platform); assertEquals("http://reviews.example/business",data.source_url)
+        assertEquals("http://reviews.example/review/one",data.reviews.single().source_url)
+        assertEquals("visible_page_sample",data.summary.stopping_reason); assertFalse(data.summary.scanned_total_known)
+        assertEquals(mapOf("attempted" to 1,"fetched" to 1,"parsed" to 1),data.summary.pages)
+        assertTrue(data.summary.warnings.any { it.contains("Structured reviews") }); assertTrue(data.summary.warnings.none { it.contains("Google Play") })
     }
     @Test fun `synthetic fixture is labeled and dates remain supplied`() {
         val data=Normalize.ingest("demo","","","")

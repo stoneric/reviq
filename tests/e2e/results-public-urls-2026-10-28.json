@@ -1,0 +1,78 @@
+{
+  "run_at": "2026-10-28T00:33:29.215Z",
+  "base_url": "http://127.0.0.1:8089",
+  "passed": 14,
+  "failed": 0,
+  "results": [
+    {
+      "name": "public landing, health and secure session properties",
+      "status": "passed",
+      "duration_ms": 1010
+    },
+    {
+      "name": "example import reports a synthetic bounded sample",
+      "status": "passed",
+      "duration_ms": 415
+    },
+    {
+      "name": "question resolves citations to the exact original review",
+      "status": "passed",
+      "duration_ms": 316
+    },
+    {
+      "name": "unrelated question is explicitly refused",
+      "status": "passed",
+      "duration_ms": 55
+    },
+    {
+      "name": "absent product fact returns insufficient evidence",
+      "status": "passed",
+      "duration_ms": 67
+    },
+    {
+      "name": "dataset and completed conversation survive reload",
+      "status": "passed",
+      "duration_ms": 116
+    },
+    {
+      "name": "independent browser session cannot read or chat with another dataset",
+      "status": "passed",
+      "duration_ms": 19
+    },
+    {
+      "name": "paste preview, duplicate removal, safe rendering and dataset replacement",
+      "status": "passed",
+      "duration_ms": 279
+    },
+    {
+      "name": "CSV BOM, quoted commas and multiline text preserve evidence and reconcile counts",
+      "status": "passed",
+      "duration_ms": 168
+    },
+    {
+      "name": "API rejects empty and oversized input, unsupported CSV and invalid metadata",
+      "status": "passed",
+      "duration_ms": 47
+    },
+    {
+      "name": "unsupported live URL is rejected and cross-origin writes fail",
+      "status": "passed",
+      "duration_ms": 18
+    },
+    {
+      "name": "clear dataset deletes reviews and history across reload",
+      "status": "passed",
+      "duration_ms": 115
+    },
+    {
+      "name": "review count cap reports exclusions instead of claiming completeness",
+      "status": "passed",
+      "duration_ms": 29
+    },
+    {
+      "name": "mobile import, chat layout and evidence drawer fit the viewport",
+      "status": "passed",
+      "duration_ms": 1302
+    }
+  ]
+}

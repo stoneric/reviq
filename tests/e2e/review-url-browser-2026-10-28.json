@@ -1,0 +1,58 @@
+{
+  "run_at": "2026-10-28T00:46:04.178Z",
+  "base_url": "http://127.0.0.1:8089",
+  "hosted_smoke": true,
+  "passed": true,
+  "model_calls": 0,
+  "url_import_requests": 2,
+  "seed_imports": 0,
+  "successful_imports": 1,
+  "source_outcomes": [
+    {
+      "name": "Generic public review page",
+      "requested_url": "https://www.anker.com/products/a2663",
+      "status": 200,
+      "duration_ms": 332,
+      "outcome": "imported",
+      "platform": "anker.com",
+      "retrieval_provider": "direct",
+      "entity": "Anker 715 Charger (Nano II 65W)",
+      "source_url": "https://www.anker.com/products/a2663",
+      "captured_at": "2026-10-28T00:46:04.752488497Z",
+      "review_count": 5,
+      "dated_review_count": 5,
+      "date_range": {
+        "from": "2026-03-12",
+        "to": "2026-03-23"
+      },
+      "pages": {
+        "attempted": 1,
+        "fetched": 1,
+        "parsed": 1
+      },
+      "stopping_reason": "visible_page_sample"
+    },
+    {
+      "name": "Trustpilot Allen Brothers",
+      "requested_url": "https://www.trustpilot.com/review/allenbrothers.com",
+      "status": 422,
+      "duration_ms": 79,
+      "outcome": "source_unavailable",
+      "error_code": "scrape_blocked",
+      "prior_dataset_preserved": true,
+      "csv_paste_recovery_visible": true
+    }
+  ],
+  "checks": [
+    "HTTP/HTTPS public URL guidance and Trustpilot example",
+    "unsupported scheme, credentials and custom ports rejected locally",
+    "exactly two URL imports with no seed, generic source first and Trustpilot second",
+    "public review URLs reach the server rather than a client site whitelist",
+    "successful imports show exact evidence and safe per-review source links, or honest source failure preserves data",
+    "CSV/paste recovery for unavailable sources",
+    "reload preserves the current dataset",
+    "no model calls or browser runtime errors",
+    "retrieval provider shown separately from source platform in provenance",
+    "review dates reconcile with summary coverage and date range"
+  ]
+}

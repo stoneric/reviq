@@ -75,7 +75,10 @@ async function main() {
     const state = await session(context);
     assert.equal(state.dataset, null);
     assert.equal(typeof state.capabilities.live_scraping, 'boolean');
-    if (state.capabilities.live_scraping) assert.deepEqual(state.capabilities.supported_platforms, ['Google Play']);
+    if (state.capabilities.live_scraping) {
+      assert.ok(state.capabilities.supported_platforms.includes('Google Play'));
+      assert.ok(state.capabilities.supported_platforms.includes('Trustpilot'));
+    }
     const cookies = await context.cookies();
     assert.ok(cookies.some(cookie => cookie.httpOnly && cookie.sameSite !== 'None'));
     if (baseURL.startsWith('https:')) assert.ok(cookies.every(cookie => cookie.secure));
@@ -232,7 +235,7 @@ async function main() {
   });
   await check('unsupported live URL is rejected and cross-origin writes fail', async () => {
     const error = await apiError(context, '/api/ingest', { type: 'url', entity: 'Test', platform: 'Test', url: 'http://127.0.0.1/' }, [400, 422]);
-    assert.match(error.error.message, /unavailable|HTTPS|Google Play/i);
+    assert.match(error.error.message, /unavailable|HTTP|public|private|safely|address/i);
     const denied = await context.request.post('/api/ingest', { headers: { Origin: 'https://untrusted.invalid' }, data: { type: 'demo' } });
     assert.equal(denied.status(), 403, await denied.text());
     const unknown = await context.request.get('/api/unknown-route');

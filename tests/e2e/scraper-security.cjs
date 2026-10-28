@@ -6,27 +6,21 @@ const fs = require('node:fs');
 const baseURL = process.env.REVIQ_BASE_URL || 'http://127.0.0.1:8089';
 const artifacts = process.env.REVIQ_E2E_ARTIFACTS || '/tmp/reviq-scraper-security';
 const attacks = [
-  ['empty', ''], ['http', 'http://play.google.com/store/apps/details?id=com.spotify.music'],
-  ['loopback', 'https://127.0.0.1/store/apps/details?id=com.spotify.music'],
-  ['ipv6 loopback', 'https://[::1]/store/apps/details?id=com.spotify.music'],
-  ['private address', 'https://10.0.0.1/store/apps/details?id=com.spotify.music'],
-  ['userinfo', 'https://private@play.google.com/store/apps/details?id=com.spotify.music'],
-  ['host suffix', 'https://play.google.com.untrusted.invalid/store/apps/details?id=com.spotify.music'],
-  ['host prefix', 'https://untrusted-play.google.com/store/apps/details?id=com.spotify.music'],
-  ['alternate port', 'https://play.google.com:8443/store/apps/details?id=com.spotify.music'],
-  ['fragment', 'https://play.google.com/store/apps/details?id=com.spotify.music#reviews'],
-  ['encoded path', 'https://play.google.com/store/apps/%64etails?id=com.spotify.music'],
-  ['extra path', 'https://play.google.com/store/apps/details/other?id=com.spotify.music'],
-  ['dot path', 'https://play.google.com/store/apps/../apps/details?id=com.spotify.music'],
-  ['missing package', 'https://play.google.com/store/apps/details?hl=en'],
-  ['duplicate package', 'https://play.google.com/store/apps/details?id=com.spotify.music&id=com.whatsapp'],
-  ['unknown query', 'https://play.google.com/store/apps/details?id=com.spotify.music&url=https://127.0.0.1'],
-  ['invalid package', 'https://play.google.com/store/apps/details?id=invalid'],
-  ['package delimiter', 'https://play.google.com/store/apps/details?id=com.spotify.music%26target%3Dprivate'],
-  ['path in package', 'https://play.google.com/store/apps/details?id=com.spotify/music'],
-  ['non-web protocol', 'file:///etc/hosts'],
-  ['malformed escape', 'https://play.google.com/store/apps/details?id=%ZZ'],
-  ['other platform', 'https://www.trustpilot.com/review/example.com'],
+  ['empty', ''], ['scheme-relative', '//example.com/reviews'],
+  ['file protocol', 'file:///etc/hosts'], ['FTP protocol', 'ftp://example.com/reviews'],
+  ['data protocol', 'data:text/html,review'], ['script protocol', 'javascript:alert(1)'],
+  ['HTTPS loopback', 'https://127.0.0.1/reviews'], ['HTTP loopback', 'http://127.0.0.1/reviews'],
+  ['localhost name', 'http://localhost/reviews'], ['localhost trailing dot', 'http://localhost./reviews'],
+  ['short loopback', 'http://127.1/reviews'], ['numeric loopback', 'http://2130706433/reviews'],
+  ['IPv6 loopback', 'https://[::1]/reviews'], ['IPv4-mapped loopback', 'https://[::ffff:127.0.0.1]/reviews'],
+  ['IPv6 private', 'https://[fc00::1]/reviews'], ['IPv6 link local', 'https://[fe80::1]/reviews'],
+  ['IPv4 private 10', 'https://10.0.0.1/reviews'], ['IPv4 private 172', 'https://172.16.0.1/reviews'],
+  ['IPv4 private 192', 'https://192.168.1.1/reviews'], ['IPv4 link local', 'https://169.254.1.1/reviews'],
+  ['IPv4 unspecified', 'http://0.0.0.0/reviews'], ['IPv4 documentation', 'https://192.0.2.1/reviews'],
+  ['embedded credentials', 'https://user:password@example.com/reviews'],
+  ['HTTP custom port', 'http://example.com:8080/reviews'], ['HTTPS custom port', 'https://example.com:8443/reviews'],
+  ['HTTP wrong default port', 'http://example.com:443/reviews'], ['HTTPS wrong default port', 'https://example.com:80/reviews'],
+  ['malformed escape', 'https://example.com/%ZZ'],
 ];
 (async () => {
   const context = await request.newContext({baseURL});
@@ -42,8 +36,9 @@ const attacks = [
       const started = Date.now();
       const response = await context.post('/api/ingest',{data:{type:'url',url}});
       const value = await response.json();
-      assert.equal(response.status(),400,`${name}: expected400, got${response.status()}`);
-      assert.equal(value.error?.code,'unsupported_url',name);
+      assert.ok([400,422].includes(response.status()),`${name}: expected400/422, got${response.status()}`);
+      assert.ok(['unsupported_url','scrape_fetch_failure','scrape_unsafe_destination'].includes(value.error?.code),`${name}: unexpected rejection code${value.error?.code}`);
+      assert.equal((await(await context.get('/api/session')).json()).dataset.id,dataset.id,`${name}: rejected import must preserve active dataset`);
       results.push({name,passed:true,status:response.status(),duration_ms:Date.now()-started});
     }
     const final = await (await context.get('/api/session')).json();

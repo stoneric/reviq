@@ -47,19 +47,20 @@ const sources=process.env.REVIQ_SCRAPER_APPS==='whatsapp'?sourceList.slice(1):so
     await page.getByRole('heading',{level:1}).waitFor();
     const initial=await(await context.request.get('/api/session')).json();
     assert.equal(initial.capabilities.live_scraping,true);
-    assert.deepEqual(initial.capabilities.supported_platforms,['Google Play']);
+    assert.ok(initial.capabilities.supported_platforms.includes('Google Play'));
+    assert.ok(initial.capabilities.supported_platforms.includes('Trustpilot'));
     assert.equal(initial.capabilities.ai_enabled,true);
     result.model=initial.capabilities.model;
     result.prompt_version=initial.capabilities.prompt_version;
-    await page.getByRole('textbox',{name:'Review page URL',exact:true}).fill('https://example.com/reviews');
+    await page.getByRole('textbox',{name:'Review page URL',exact:true}).fill('file:///etc/hosts');
     let requests=0;
     const listener=req=>{if(req.method()==='POST'&&new URL(req.url()).pathname==='/api/ingest')requests++};
     page.on('request',listener);
     await page.getByRole('button',{name:'Ingest reviews',exact:true}).click();
     await page.getByRole('button',{name:'Upload CSV instead'}).waitFor();
-    assert.equal(requests,0,'Unsupported URL should be rejected before a network request');
+    assert.equal(requests,0,'Unsupported scheme should be rejected before a network request');
     page.off('request',listener);
-    result.checks.push('unsupported platform rejected locally with CSV/paste recovery');
+    result.checks.push('unsupported URL scheme rejected locally with CSV/paste recovery');
     for(const [name,url] of sources){
       if(active)await page.getByRole('button',{name:'New',exact:true}).click();
       await page.getByRole('textbox',{name:'Review page URL',exact:true}).fill(url);
@@ -77,12 +78,12 @@ const sources=process.env.REVIQ_SCRAPER_APPS==='whatsapp'?sourceList.slice(1):so
       assert.equal(data.source_url,`${url}&hl=en&gl=US`);
       assert.ok(data.captured_at&&Math.abs(Date.now()-Date.parse(data.captured_at))<120000,'Capture timestamp must reflect this fetch');
       assert.ok(data.reviews.length>0&&data.reviews.length<=200);
-      assert.deepEqual(data.summary.pages,{attempted:1,fetched:1,parsed:1});
+      for(const field of ['attempted','fetched','parsed'])assert.equal(data.summary.pages[field],1,`Review-page ${field} count`);
       assert.equal(data.summary.stopping_reason,'visible_page_sample');
       assert.equal(data.summary.scanned_total_known,false);
       assert.equal(data.summary.observed,data.summary.accepted+data.summary.rejected+data.summary.duplicates+data.summary.excluded);
       assert.equal(await page.getByText('Synthetic sample for exploring Reviq.',{exact:false}).count(),0);
-      assert.deepEqual(state.history,[]);
+      assert.equal(state.history.length,0);
       await page.getByText('Provenance & coverage',{exact:true}).click();
       for(const label of ['Pages attempted','Pages fetched','Pages parsed']){
         const value=page.getByText(label,{exact:true}).locator('..').locator('dd');
