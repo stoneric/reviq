@@ -28,6 +28,8 @@ fun safeUrl(raw: String?): String? = raw?.trim()?.takeIf { it.isNotBlank() && it
 }
 object Normalize {
     const val MAX_BYTES = 1048576
+    internal fun canonicalReviewText(text: String): String =
+        Normalizer.normalize(text, Normalizer.Form.NFKC).replace(Regex("\\s+")," ").trim()
     fun ingest(type: String, entity: String, platform: String, content: String, url: String? = null): Dataset {
         if (content.toByteArray(Charsets.UTF_8).size > MAX_BYTES) throw ApiError(413,"input_too_large","Upload or paste must be no larger than 1 MiB.")
         if (type == "url") throw ApiError(422,"scraping_unavailable","Live scraping is unavailable. Export reviews as CSV or paste them to continue.")
@@ -63,7 +65,7 @@ object Normalize {
         for (row in rows) {
             val text = row["text"].orEmpty()
             if (text.isBlank()) { rejected++; continue }
-            val canonical = Normalizer.normalize(text, Normalizer.Form.NFKC).replace(Regex("\\s+")," ").trim()
+            val canonical = canonicalReviewText(text)
             if (!seen.add(hash(canonical))) { duplicates++; continue }
             if (accepted.size >= 200) { excluded++; reasons += "count_limit"; continue }
             fun optional(name: String, max: Int = 500): String? = row[name]?.trim()?.takeIf { it.isNotEmpty() }?.also { if (it.length > max) oversizedFields++ }?.takeIf { it.length <= max }

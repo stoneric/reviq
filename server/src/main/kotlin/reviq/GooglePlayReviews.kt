@@ -19,12 +19,14 @@ internal data class GooglePlayCollection(
     val rows: List<Map<String,String>>,
     val batches: Int,
     val stoppingReason: String,
-    val duplicateIds: Int = 0
+    val duplicateIds: Int = 0,
+    val usableUniqueTexts: Int = rows.map { it["text"].orEmpty() }.filter { it.isNotBlank() }.map(Normalize::canonicalReviewText).distinct().size,
+    val unknownTimestamps: Int = 0
 )
 internal fun interface GooglePlayReviewSource {
     fun collect(canonicalUrl: String, deadline: Long, cancelled: AtomicBoolean, activeCall: AtomicReference<Call?>): GooglePlayCollection
 }
-internal data class GooglePlayReviewRecord(val sourceId: String, val row: Map<String,String>)
+internal data class GooglePlayReviewRecord(val sourceId: String, val row: Map<String,String>, val sourceTimestamp: Instant? = null)
 internal data class GooglePlayReviewBatch(val reviews: List<GooglePlayReviewRecord>, val nextToken: String?)
 internal fun interface GooglePlayBatchFetcher {
     fun fetch(appId: String, count: Int, token: String?, deadline: Long, cancelled: AtomicBoolean, activeCall: AtomicReference<Call?>, maxBytes: Int): ByteArray
@@ -35,7 +37,7 @@ internal object GooglePlayReviews: GooglePlayReviewSource {
     private const val ENDPOINT="https://play.google.com/_/PlayStoreUi/data/batchexecute?hl=en&gl=US"
     private const val RPC="oCPfdb"
     internal const val TARGET=200
-    internal const val BATCH_SIZE=100
+    internal const val BATCH_SIZE=200
     private const val MAX_BATCHES=5
     private const val MAX_BYTES=2*1024*1024
     private const val MAX_TOKEN_LENGTH=4096
@@ -47,17 +49,26 @@ internal object GooglePlayReviews: GooglePlayReviewSource {
     internal fun collect(canonicalUrl: String, deadline: Long, cancelled: AtomicBoolean, activeCall: AtomicReference<Call?>, fetcher: GooglePlayBatchFetcher): GooglePlayCollection {
         val source=GooglePlayScraper.canonicalUrl(canonicalUrl)
         val appId=source.toHttpUrlOrNull()?.queryParameter("id") ?: throw parseFailure()
-        val records=linkedMapOf<String,Map<String,String>>()
+        val records=linkedMapOf<String,GooglePlayReviewRecord>()
+        val sourceOrder=mutableMapOf<String,Int>()
+        val usableTexts=mutableSetOf<String>()
         val seenTokens=mutableSetOf<String>()
         var token: String?=null
         var bytes=0
         var duplicates=0
         var batches=0
+        var encountered=0
+        fun result(reason: String): GooglePlayCollection {
+            // Keep the feed order of the chosen source version for equal timestamps.
+            // Null source timestamps sort last and are explicitly reported as unknown.
+            val ordered=records.values.sortedWith(compareByDescending<GooglePlayReviewRecord> { it.sourceTimestamp }.thenBy { sourceOrder.getValue(it.sourceId) })
+            return GooglePlayCollection(ordered.map { it.row },batches,reason,duplicates,usableTexts.size,ordered.count { it.sourceTimestamp==null })
+        }
         while(batches<MAX_BATCHES) {
             checkActive(deadline,cancelled)
             val remainingBytes=MAX_BYTES-bytes
             if(remainingBytes<=0) throw bodyLimit()
-            val count=minOf(BATCH_SIZE,TARGET-records.size)
+            val count=minOf(BATCH_SIZE,TARGET-usableTexts.size)
             val raw=fetcher.fetch(appId,count,token,deadline,cancelled,activeCall,remainingBytes)
             checkActive(deadline,cancelled)
             if(raw.size>remainingBytes) throw bodyLimit()
@@ -66,17 +77,32 @@ internal object GooglePlayReviews: GooglePlayReviewSource {
             batches++
             if(batch.reviews.size>count) throw parseFailure()
             if(batch.nextToken!=null && !seenTokens.add(batch.nextToken)) throw stalled()
-            val before=records.size
+            var progressed=false
             batch.reviews.forEach { record ->
-                if(records.putIfAbsent(record.sourceId,record.row)!=null) duplicates++
+                val order=encountered++
+                val existing=records[record.sourceId]
+                if(existing==null) { records[record.sourceId]=record; sourceOrder[record.sourceId]=order; progressed=true }
+                else {
+                    duplicates++
+                    if(record.sourceTimestamp!=null && (existing.sourceTimestamp==null || record.sourceTimestamp>existing.sourceTimestamp)) {
+                        records[record.sourceId]=record; sourceOrder[record.sourceId]=order; progressed=true
+                    }
+                }
+            }
+            // A newer version of a source ID can change its wording, including becoming
+            // blank or matching another record. Recount rather than assuming only growth.
+            usableTexts.clear()
+            records.values.forEach { record ->
+                val text=record.row["text"].orEmpty()
+                if(text.isNotBlank()) usableTexts.add(Normalize.canonicalReviewText(text))
             }
             checkActive(deadline,cancelled)
-            if(records.size==before && batch.nextToken!=null) throw stalled()
-            if(records.size>=TARGET) return GooglePlayCollection(records.values.toList(),batches,"google_play_target_reached",duplicates)
-            if(batch.nextToken==null) return GooglePlayCollection(records.values.toList(),batches,"google_play_source_exhausted",duplicates)
+            if(!progressed && batch.nextToken!=null) throw stalled()
+            if(usableTexts.size>=TARGET) return result("google_play_target_reached")
+            if(batch.nextToken==null) return result("google_play_source_exhausted")
             token=batch.nextToken
         }
-        return GooglePlayCollection(records.values.toList(),batches,"google_play_page_limit",duplicates)
+        return result("google_play_page_limit")
     }
 
     internal fun requestBody(appId: String, count: Int, token: String? = null): String {
@@ -120,13 +146,25 @@ internal object GooglePlayReviews: GooglePlayReviewSource {
             val row=linkedMapOf("text" to if(textNode.isTextual) textNode.asText() else "", "source_url" to source)
             review.path(1).path(0).takeIf { it.isTextual }?.asText()?.let { row["author"]=it }
             review.path(2).takeIf { it.isIntegralNumber && it.canConvertToInt() && it.asInt() in 1..5 }?.let { row["rating"]=it.asInt().toString() }
-            review.path(5).path(0).takeIf { it.isIntegralNumber && it.canConvertToLong() }?.asLong()?.let { seconds ->
-                try { row["date"]=Instant.ofEpochSecond(seconds).atZone(ZoneOffset.UTC).toLocalDate().toString() } catch(_: Exception) { /* Unknown date stays missing. */ }
-            }
+            val timestamp=sourceTimestamp(review.path(5))
+            timestamp?.let { row["date"]=it.atZone(ZoneOffset.UTC).toLocalDate().toString() }
             // Index 7 is the developer response. It never becomes review evidence.
-            GooglePlayReviewRecord(id,row)
+            GooglePlayReviewRecord(id,row,timestamp)
         }
         return GooglePlayReviewBatch(records,token)
+    }
+
+    private fun sourceTimestamp(node: JsonNode): Instant? {
+        if(!node.isArray || !node.path(0).isIntegralNumber || !node.path(0).canConvertToLong()) return null
+        val nanosNode=node.path(1)
+        val nanos=when {
+            nanosNode.isMissingNode || nanosNode.isNull -> 0L
+            nanosNode.isIntegralNumber && nanosNode.canConvertToLong() && nanosNode.asLong() in 0..999999999L -> nanosNode.asLong()
+            else -> return null
+        }
+        return try {
+            Instant.ofEpochSecond(node[0].asLong(),nanos).takeIf { it.atZone(ZoneOffset.UTC).year in 1..9999 }
+        } catch(_: Exception) { null }
     }
 
     /** Accept the observed bare JSON response and Google's byte-length framed variant. */

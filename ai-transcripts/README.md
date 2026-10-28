@@ -1,6 +1,6 @@
 # Recorded implementation sessions
 
-These JSONL snapshots derive from the actual recorded Codex implementation session and its three participating agents. They preserve the chronology of visible user/assistant messages and tool-event occurrences. They are **privacy-filtered public exports, not complete or unedited raw transcripts**. No missing messages, tool results, or reasoning are reconstructed.
+These JSONL snapshots derive from eleven recorded Codex sessions in the Reviq workspace, covering planning, implementation and its participating agents, public review imports, and the bug audit and deployment. They preserve the chronology of visible user/assistant messages and tool-event occurrences. They are **privacy-filtered public exports, not complete or unedited raw transcripts**. No missing messages, tool results, or reasoning are reconstructed.
 
 Publication applies a conservative boundary:
 
@@ -19,4 +19,4 @@ python3 ops/export-transcripts.py --self-test
 python3 ops/export-transcripts.py
 ```
 
-The exporter reads credential values locally for exact-value redaction and validation without printing them. Its regression checks cover credentials, private host/path/email details, tool-result omission, runtime context, and exclusion of protected messages. The active session's snapshot ends when the exporter runs; it may therefore precede the final response or later changes. The repository already existed and included the supplied implementation plan; these records do not claim a fresh planning session. Earlier concurrent work from another task is not presented as part of this session.
+The exporter reads credential values locally for exact-value redaction and validation without printing them. Its regression checks cover credentials, private host/path/email details, tool-result omission, runtime context, and exclusion of protected messages. The active session's snapshot ends when the exporter runs; it may therefore precede the final response, commit, pull request, or merge. The repository already existed and included the supplied implementation plan. Each export remains a separate recorded session; overlapping context is not presented as a single uninterrupted conversation.

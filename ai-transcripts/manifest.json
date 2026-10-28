@@ -1,6 +1,6 @@
 {
   "format": "privacy-filtered-visible-event-export-v2",
-  "snapshot_utc": "2026-10-28T00:10:47.836218+00:00",
+  "snapshot_utc": "2026-10-28T16:34:58.226298+00:00",
   "complete_raw_transcript": false,
   "excluded": [
     "system/developer instructions",
@@ -13,16 +13,66 @@
   "original_logs": "Preserved unchanged in local Codex session storage; not included in this public repository.",
   "sessions": [
     {
+      "file": "visible-2026-10-27T23-03-03-01a17f9a-580a-76b0-bf1e-6fe9cfa8c5c1.jsonl",
+      "purpose": "initial Reviq requirements and planning",
+      "recorded_events": 43,
+      "excluded_private_or_internal_events": 122,
+      "publication_redactions": {
+        "runtime or agent context omitted": 1,
+        "complete tool payload omitted": 37
+      },
+      "sha256": "f3b4eb822b9eaff1ac86e0d3d40e4f9a97f9a51f9d42cd6b2aedf74d9804c7f0"
+    },
+    {
+      "file": "visible-2026-10-27T23-17-27-01a17fa7-8704-7aa1-866c-1c50da4865bf.jsonl",
+      "purpose": "Reviq planning continuation",
+      "recorded_events": 46,
+      "excluded_private_or_internal_events": 125,
+      "publication_redactions": {
+        "runtime or agent context omitted": 1,
+        "complete tool payload omitted": 39,
+        "private filesystem paths": 2,
+        "host configuration paths": 4,
+        "unrelated hostnames": 3
+      },
+      "sha256": "4d9c8d4bda39bc9bfa6646e16d16f7b55cb62c088535bacc13bb8f9dcea7004c"
+    },
+    {
+      "file": "visible-2026-10-27T23-17-32-01a17fa7-9a6b-7df1-a73c-e6e8ce600f9c.jsonl",
+      "purpose": "Reviq implementation preparation",
+      "recorded_events": 28,
+      "excluded_private_or_internal_events": 52,
+      "publication_redactions": {
+        "runtime or agent context omitted": 1,
+        "complete tool payload omitted": 23
+      },
+      "sha256": "fd65f5c315eacb8ca71526f9a42ad9fbabf6013118a707a6dfa889a4ababfa02"
+    },
+    {
       "file": "visible-2026-10-27T23-18-42-01a17fa8-abe3-7081-9300-9ea7dea879cb.jsonl",
       "purpose": "implementation coordinator",
-      "recorded_events": 349,
-      "excluded_private_or_internal_events": 1086,
+      "recorded_events": 876,
+      "excluded_private_or_internal_events": 2719,
       "publication_redactions": {
         "runtime or agent context omitted": 2,
-        "complete tool payload omitted": 320,
-        "private filesystem paths": 1
+        "complete tool payload omitted": 790,
+        "private filesystem paths": 1,
+        "unrelated URL hosts": 8,
+        "unrelated hostnames": 2,
+        "host configuration paths": 5
       },
-      "sha256": "311d202051f677b5d46296f5ebc4b3746e8be37f5d9374fdc827a19821b97fb1"
+      "sha256": "af3c7a9a9e5c6d780f3caa94c414ad1c41914e245d9a97078840b6d4e7556af7"
+    },
+    {
+      "file": "visible-2026-10-27T23-18-50-01a17fa8-c7e3-79f3-bf43-ded847c2c222.jsonl",
+      "purpose": "Reviq implementation continuation",
+      "recorded_events": 40,
+      "excluded_private_or_internal_events": 49,
+      "publication_redactions": {
+        "runtime or agent context omitted": 1,
+        "complete tool payload omitted": 34
+      },
+      "sha256": "cb2eaf0a9833d8b2688c58d432f38b61aab21f1254685240cc29bfdaa1ef2020"
     },
     {
       "file": "visible-2026-10-27T23-19-23-01a17fa9-4a51-7f21-aeb4-a1c92e7e4ea6.jsonl",
@@ -39,24 +89,60 @@
     {
       "file": "visible-2026-10-27T23-20-06-01a17fa9-f243-7da2-a86a-2acb277f5d79.jsonl",
       "purpose": "Kotlin backend and tests",
-      "recorded_events": 204,
-      "excluded_private_or_internal_events": 590,
+      "recorded_events": 409,
+      "excluded_private_or_internal_events": 1284,
       "publication_redactions": {
         "runtime or agent context omitted": 2,
-        "complete tool payload omitted": 191
+        "complete tool payload omitted": 379,
+        "unrelated URL hosts": 2
       },
-      "sha256": "0b397c2029e440070475a3a9f7c23213d04c95344789f6804d7ab5ceb14cc8b9"
+      "sha256": "7a6e8309aa34ed98cd0ae3903b3dece4bcdf73a4a523cb70c1acc8ebc8c096d4"
     },
     {
       "file": "visible-2026-10-27T23-20-45-01a17faa-891a-7a40-b759-95174b48e3c3.jsonl",
       "purpose": "acceptance tests and publication review",
-      "recorded_events": 318,
-      "excluded_private_or_internal_events": 795,
+      "recorded_events": 595,
+      "excluded_private_or_internal_events": 1562,
       "publication_redactions": {
         "runtime or agent context omitted": 2,
-        "complete tool payload omitted": 312
+        "complete tool payload omitted": 559
       },
-      "sha256": "86920838ce0d6a68e7ddd902c8179156cb4845bd6145c8f0d6dcddc27a5ac0b8"
+      "sha256": "95161f5d8a472ed9e4380eb74fb4a3ca8a15068e90066329761e5a7d2b3b9da5"
+    },
+    {
+      "file": "visible-2026-10-28T00-03-36-01a17fd1-c734-76a1-9d79-52e30ad7bf88.jsonl",
+      "purpose": "implementation follow-up records",
+      "recorded_events": 20,
+      "excluded_private_or_internal_events": 71,
+      "publication_redactions": {
+        "runtime or agent context omitted": 1,
+        "complete tool payload omitted": 14
+      },
+      "sha256": "19dedf4c8daa4eb5b7724efc99d38543334d45b6ce0c1ee63e9d51cbecf2e247"
+    },
+    {
+      "file": "visible-2026-10-28T00-25-19-01a17fe5-a652-7021-adb7-bd7be4c4a8e9.jsonl",
+      "purpose": "public review imports, Exa retrieval and Google Play collection",
+      "recorded_events": 200,
+      "excluded_private_or_internal_events": 558,
+      "publication_redactions": {
+        "complete tool payload omitted": 187,
+        "unrelated hostnames": 5,
+        "unrelated URL hosts": 3
+      },
+      "sha256": "9b3ce21379f0b1c861492eb3a4f51941ea1a425d33cb24f99e86714ba1615dbb"
+    },
+    {
+      "file": "visible-2026-10-28T15-01-06-01a18307-75e9-7a42-bb2d-496ad621318e.jsonl",
+      "purpose": "bug audit, regression fixes, deployment and delivery",
+      "recorded_events": 127,
+      "excluded_private_or_internal_events": 434,
+      "publication_redactions": {
+        "runtime or agent context omitted": 1,
+        "complete tool payload omitted": 109,
+        "host configuration paths": 1
+      },
+      "sha256": "0f699b041f4ed061f730a2565f527095f0cb3da08b8fa52d55de30a6c24d020e"
     }
   ]
 }

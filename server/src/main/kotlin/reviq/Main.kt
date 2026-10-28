@@ -79,6 +79,7 @@ fun main() {
             analyst.validateQuestion(question)
             val id=body.path("dataset_id").asText("")
             val data=store.dataset(session(ctx),id) ?: throw ApiError(404,"dataset_not_found","This dataset has expired or is not available in your session. Load reviews again.")
+            val revision=store.conversationRevision(session(ctx),data.id) ?: throw ApiError(404,"dataset_not_found","This dataset has expired or is not available in your session. Load reviews again.")
             val history=store.history(session(ctx),data.id)
             analyst.input(data,history,question)
             request=store.reserve("chat",session(ctx),ip(ctx),analyst.reservationCost())
@@ -89,10 +90,10 @@ fun main() {
             timeout=vertx.setTimer(65000) { cancel() }
             fun send(event: String, value: Any) { if(!cancelled.get() && !ctx.response().ended()) ctx.response().write("event: $event\ndata: ${mapper.writeValueAsString(value)}\n\n") }
             send("meta",mapOf("dataset_id" to data.id,"mode" to analyst.mode,"draft" to true))
-            val answer=analyst.answer(data,history,question,cancelled,stream) { send("delta",mapOf("text" to it)) }
-            answer.actualCost?.let { store.reconcile(request!!,it) }
+            val answer=analyst.answer(data,history,question,cancelled,stream,onUsage={ store.reconcile(request!!,it) }) { send("delta",mapOf("text" to it)) }
             if(!cancelled.get()) {
-                store.saveExchange(session(ctx),data.id,question,answer.text,answer.citations,answer.mode)
+                if(!store.saveExchange(session(ctx),data.id,question,answer.text,answer.citations,answer.mode,revision))
+                    throw ApiError(409,"conversation_changed","The conversation was cleared or the dataset changed while this answer was running. This answer has not been saved.")
                 send("citations",mapOf("ids" to answer.citations))
                 send("done",mapOf("answer" to answer.text,"citations" to answer.citations,"mode" to answer.mode,"verified" to answer.verified)); ctx.response().end()
             }

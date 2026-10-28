@@ -22,10 +22,17 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 SESSIONS = {
+    '01a17f9a-580a-76b0-bf1e-6fe9cfa8c5c1': 'initial Reviq requirements and planning',
+    '01a17fa7-8704-7aa1-866c-1c50da4865bf': 'Reviq planning continuation',
+    '01a17fa7-9a6b-7df1-a73c-e6e8ce600f9c': 'Reviq implementation preparation',
     '01a17fa8-abe3-7081-9300-9ea7dea879cb': 'implementation coordinator',
+    '01a17fa8-c7e3-79f3-bf43-ded847c2c222': 'Reviq implementation continuation',
     '01a17fa9-4a51-7f21-aeb4-a1c92e7e4ea6': 'reference design and frontend',
     '01a17fa9-f243-7da2-a86a-2acb277f5d79': 'Kotlin backend and tests',
     '01a17faa-891a-7a40-b759-95174b48e3c3': 'acceptance tests and publication review',
+    '01a17fd1-c734-76a1-9d79-52e30ad7bf88': 'implementation follow-up records',
+    '01a17fe5-a652-7021-adb7-bd7be4c4a8e9': 'public review imports, Exa retrieval and Google Play collection',
+    '01a18307-75e9-7a42-bb2d-496ad621318e': 'bug audit, regression fixes, deployment and delivery',
 }
 PUBLIC_DOMAINS = {
     'reviq.xyz', 'www.reviq.xyz', 'revenue-iq-dashboard.lovable.app',
