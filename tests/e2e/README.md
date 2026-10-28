@@ -19,6 +19,24 @@ Coverage: landing and mobile layout; demo import; supplied-sample summary; origi
 
 A pass in evidence-search mode does **not** constitute a live-model evaluation. Live OpenAI grounding, injection resistance, usage accounting, provider failure cancellation, and streamed-draft semantic accuracy must be evaluated separately with the configured model.
 
+## Google Play review batches
+
+On **2026-10-28 at 02:32 UTC**, the isolated OnePageCRM browser check passed with **100 requested and 83 accepted written reviews**. Google Play exhausted the English/US, newest-first selection after two review batches; metadata plus those batches produced three attempted, fetched, and parsed pages. No review was rejected, deduplicated, or excluded by normalization. The result is `google_play_source_exhausted` with `scanned_total_known:false`: it does not claim that the selected written-review stream covers every rating or locale. See [`google-play-paging-browser-2026-10-28.json`](google-play-paging-browser-2026-10-28.json).
+
+The deployed HTTPS check passed on **2026-10-28 at 02:36 UTC**, again requesting 100 and importing all **83** available written reviews in this selection. It verified the three-page/two-batch provenance, exact evidence for R001, R042 and R083, final-review search, reload and mobile layout. The hosted check used exactly one import, no seed and no chat requests. See [`google-play-paging-hosted-2026-10-28.json`](google-play-paging-hosted-2026-10-28.json).
+
+The same build passed **14/14** browser regressions in evidence mode and **31/31** URL/cache security cases: [`results-google-play-paging-2026-10-28.json`](results-google-play-paging-2026-10-28.json) and [`scraper-security-google-play-paging-2026-10-28.json`](scraper-security-google-play-paging-2026-10-28.json). No Exa retrieval checks or OpenAI calls were run for this verification.
+
+```sh
+NODE_PATH=/tmp/reviq-browser-tests/node_modules \
+  REVIQ_BASE_URL=http://127.0.0.1:8089 \
+  node tests/e2e/google-play-reviews-smoke.cjs
+```
+
+`google-play-reviews-smoke.cjs` makes exactly one fresh import of `com.onepagecrm`, with no seed or chat requests. It checks the default target of 100, actual accepted/observed counts, count/token limits, normalized-text uniqueness, rating/date statistics, requested reviews and batch/page counters in the UI, exact first/middle/final evidence, final-review search, reload, and mobile layout. It removes only its own session dataset afterward. Review text and authors remain in memory; reports contain metadata and counts only. The default artifact directory is `/tmp/reviq-google-play-reviews`, configurable with `REVIQ_E2E_ARTIFACTS`. Use the HTTPS base URL only for a coordinated production check.
+
+Defaults deliberately match the verified current source: 83 accepted/observed, two batches, three pages, and `google_play_source_exhausted`. If the live source changes, explicitly set `REVIQ_EXPECT_REVIEW_COUNT`, `REVIQ_EXPECT_OBSERVED_COUNT`, `REVIQ_EXPECT_REVIEW_BATCHES`, `REVIQ_EXPECT_PAGES`, and/or `REVIQ_EXPECT_STOPPING_REASON` to the expected contract. A source supplying 100 accepted reviews should assert 100 and `google_play_target_reached`; do not treat an unexplained shortfall as success. Accepted counts may be below fetched counts when identical text or normalization limits remove records, and the summary must reconcile that difference.
+
 ## Explicit Exa cached retrieval
 
 On 2026-10-28 at 02:05 UTC, the isolated Exa-enabled build passed the focused cached-import browser flow, all **14/14** browser regressions in evidence mode, and **31/31** URL/cache security cases. The security additions reject a nonboolean cache option, cached mode on CSV, and a cached request targeting loopback before provider retrieval. Reports: [`exa-cache-browser-2026-10-28.json`](exa-cache-browser-2026-10-28.json), [`results-exa-cache-2026-10-28.json`](results-exa-cache-2026-10-28.json), and [`scraper-security-exa-cache-2026-10-28.json`](scraper-security-exa-cache-2026-10-28.json).

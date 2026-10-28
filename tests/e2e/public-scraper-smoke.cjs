@@ -77,17 +77,21 @@ const sources=process.env.REVIQ_SCRAPER_APPS==='whatsapp'?sourceList.slice(1):so
       assert.match(data.entity_name,new RegExp(name,'i'));
       assert.equal(data.source_url,`${url}&hl=en&gl=US`);
       assert.ok(data.captured_at&&Math.abs(Date.now()-Date.parse(data.captured_at))<120000,'Capture timestamp must reflect this fetch');
-      assert.ok(data.reviews.length>0&&data.reviews.length<=200);
-      for(const field of ['attempted','fetched','parsed'])assert.equal(data.summary.pages[field],1,`Review-page ${field} count`);
-      assert.equal(data.summary.stopping_reason,'visible_page_sample');
+      assert.ok(data.reviews.length>0&&data.reviews.length<=100);
+      const pages=data.summary.pages;
+      assert.equal(pages.requested_reviews,100);
+      assert.ok(Number.isInteger(pages.review_batches)&&pages.review_batches>0);
+      assert.ok(pages.attempted>=pages.fetched&&pages.fetched>=pages.parsed&&pages.parsed>0);
+      assert.equal(pages.parsed,pages.review_batches+1,'Page count includes app metadata and parsed review batches');
+      assert.match(data.summary.stopping_reason,/google_play_(target_reached|source_exhausted)|page_limit|count_limit|token_limit|scan_limit/);
       assert.equal(data.summary.scanned_total_known,false);
       assert.equal(data.summary.observed,data.summary.accepted+data.summary.rejected+data.summary.duplicates+data.summary.excluded);
       assert.equal(await page.getByText('Synthetic sample for exploring Reviq.',{exact:false}).count(),0);
       assert.equal(state.history.length,0);
       await page.getByText('Provenance & coverage',{exact:true}).click();
-      for(const label of ['Pages attempted','Pages fetched','Pages parsed']){
+      for(const [label,key] of [['Pages attempted','attempted'],['Pages fetched','fetched'],['Pages parsed','parsed'],['Requested reviews','requested_reviews'],['Review batches','review_batches']]){
         const value=page.getByText(label,{exact:true}).locator('..').locator('dd');
-        assert.equal(await value.innerText(),'1');
+        assert.equal(await value.innerText(),String(pages[key]));
       }
       await page.getByText('Preview ingested reviews',{exact:false}).click();
       const first=data.reviews[0];
@@ -98,7 +102,7 @@ const sources=process.env.REVIQ_SCRAPER_APPS==='whatsapp'?sourceList.slice(1):so
       result.imports.push({entity:data.entity_name,source_url:data.source_url,captured_at:data.captured_at,mode:data.mode,review_count:data.reviews.length,observed:data.summary.observed,rejected:data.summary.rejected,duplicates:data.summary.duplicates,excluded:data.summary.excluded,pages:data.summary.pages,stopping_reason:data.summary.stopping_reason,scanned_total_known:data.summary.scanned_total_known,duration_ms:Date.now()-started});
       active=data;
     }
-    result.checks.push(`${sources.length} fresh real Google Play imports`,'canonical source URL and fresh capture timestamp','bounded partial-page provenance','accurate accepted/rejected/duplicate/excluded counts','original evidence text matches without synthetic labels');
+    result.checks.push(`${sources.length} fresh real Google Play imports`,'canonical source URL and fresh capture timestamp','bounded Google Play batch provenance and requested review limit','accurate accepted/rejected/duplicate/excluded counts','original evidence text matches without synthetic labels');
     if(sources.length>1)result.checks.push('dataset replacement clears prior context');
     await page.getByLabel('Question',{exact:true}).fill(process.env.REVIQ_SCRAPER_QUESTION||'Summarize the reviewers’ feedback in this sample using exact supporting excerpts and review citations.');
     const responseReady=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/chat'&&response.request().method()==='POST');

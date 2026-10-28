@@ -1,3 +1,32 @@
+# Reviq 1.3.0 — Google Play review pagination
+
+Release date: 28 October 2026. Live application: https://reviq.xyz/.
+
+## What changed
+
+Fresh Google Play URL imports now request up to **100 review records**, newest first, using the public English/US review feed. Previously the importer only extracted the three preview reviews displayed on an app page. It now retrieves additional records in batches of at most 50 and shows the requested count, review-batch count and stopping reason.
+
+For the requested `https://play.google.com/store/apps/details?id=com.onepagecrm`, Google Play returned **83 written reviews** in two batches (50 + 33), then no continuation. Reviq accepted all 83. This is the available sample for that selection; it does not assert that the app has only 83 ratings or reviews worldwide. A separate Spotify check retrieved 100 records and accepted 99 after removing one repeated text.
+
+## Implementation history
+
+1. Probed the public website's current review request and verified that a 100-record request and a 50 + 33 paginated request return the same 83 OnePageCRM review IDs. All 83 texts were unique after normalization. The direct request uses no Exa credits or model calls.
+2. Implemented a fixed-host review client and strict response parser. The app name requires canonical and SoftwareApplication metadata matching the requested package before reviews are fetched. Original review text is preserved, developer replies are excluded, timestamps become UTC dates, and continuation values are treated only as opaque request data. The [maintainer's request implementation](https://github.com/JoMingyu/google-play-scraper/blob/master/google_play_scraper/constants/request.py) provided the protocol reference; the live response verified it.
+3. Added collection limits and atomic failure handling: up to five review batches, a cumulative 2 MiB review-response limit and the existing 15-second deadline. Repeated source IDs are ignored; text deduplication and the 24,000-token admission bound still apply. A failed or stalled later page preserves the user's prior dataset instead of silently replacing it with the three-card preview. An empty terminal page is a valid end to pagination.
+4. Updated import guidance and provenance for paginated Google Play samples. Other-site and explicit cached-snapshot imports retain their existing behavior. Real review bodies, author names and raw responses remain outside committed artifacts.
+
+## Validation
+
+All **106 backend tests passed with no skips**, including actual PostgreSQL checks, real OnePageCRM and Spotify paging, UTF-8 response framing, exact text, reply exclusion, source validation, cursor handling, byte limits, cancellation, exhaustion and failed later pages. The frontend build passed. All **14 browser regression scenarios** and **31 URL/cache security cases** passed.
+
+The isolated OnePageCRM browser flow imported **83/83 records**, with no duplicates, rejected records or exclusions and 7,103 dataset tokens. It verified three fetched/parsed responses (one metadata page and two review batches), exact evidence from the first/middle/final reviews, access to the final review after reload and on mobile, and zero chat requests.
+
+The deployed HTTPS walkthrough passed at **02:36 UTC** with exactly one URL import and zero chat requests: 100 requested, 83 observed and accepted, three fetched/parsed responses and two review batches. Exact source evidence, final-review access, reload and mobile layout passed. See `tests/e2e/google-play-paging-hosted-2026-10-28.json`.
+
+The consumer Google Play review endpoint is not a stable official API and may change. Requests target 100 records; source availability, validation, duplicate-text removal and token limits determine the number admitted. The app reports those counts rather than filling missing reviews.
+
+---
+
 # Reviq 1.2.0 — Exa retrieval and explicit cached snapshots
 
 Release date: 28 October 2026. Live application: https://reviq.xyz/.

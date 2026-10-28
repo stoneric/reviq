@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicReference
 fun main() {
     val store = Store(); val analyst = Analyst(); val exa=ExaContentsClient()
     val scraper=ReviewScraper(
+        googlePlaySource=GooglePlayReviews,
         exaFetcher=if(exa.enabled) ExaPageFetcher { url,deadline,cancelled,call -> exa.fetch(url,deadline,cancelled,call) } else null,
         exaCachedFetcher=if(exa.enabled) ExaPageFetcher { url,deadline,cancelled,call -> exa.fetch(url,deadline,cancelled,call,cacheOnly=true) } else null,
         reserveExa=store::reserveExa,reconcileExa=store::reconcile)

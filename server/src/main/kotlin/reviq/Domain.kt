@@ -42,13 +42,16 @@ object Normalize {
         }
         return normalizeRows(type,entityName,source,rows,cutoff,url)
     }
-    fun scraped(entity: String, rows: List<Map<String,String>>, sourceUrl: String, capturedAt: String, platform: String = "Google Play", warnings: List<String> = emptyList()): Dataset {
+    fun scraped(entity: String, rows: List<Map<String,String>>, sourceUrl: String, capturedAt: String, platform: String = "Google Play", warnings: List<String> = emptyList(),
+                pages: Map<String,Any?> = mapOf("attempted" to 1,"fetched" to 1,"parsed" to 1),
+                stoppingReason: String = "visible_page_sample",
+                coverageWarning: String = "Only identifiable reviews in the fetched public page were captured. This is a selected sample; the total unseen review count is unknown. No review pagination was attempted."): Dataset {
         val data=normalizeRows("scraped",metadata(entity,"Product or business name"),metadata(platform,"Source platform"),rows.take(1000),rows.size>1000,sourceUrl)
         return data.copy(mode="scraped",captured_at=capturedAt,retrieval_provider="direct",retrieval_freshness="live",retrieved_at=capturedAt,summary=data.summary.copy(
-            stopping_reason=if(data.summary.stopping_reason=="source_exhausted") "visible_page_sample" else data.summary.stopping_reason,
+            stopping_reason=if(data.summary.stopping_reason=="source_exhausted") stoppingReason else data.summary.stopping_reason,
             scanned_total_known=false,
-            pages=mapOf("attempted" to 1,"fetched" to 1,"parsed" to 1),
-            warnings=(data.summary.warnings + warnings + "Only identifiable reviews in the fetched public page were captured. This is a selected sample; the total unseen review count is unknown. No review pagination was attempted.").distinct()
+            pages=pages,
+            warnings=(data.summary.warnings + warnings + coverageWarning).distinct()
         ))
     }
     private fun normalizeRows(type: String, entityName: String, source: String, rows: List<Map<String,String>>, cutoff: Boolean, url: String?): Dataset {

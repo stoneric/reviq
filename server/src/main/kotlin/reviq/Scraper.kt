@@ -90,6 +90,7 @@ internal class ReviewScraper(
     private val timeoutMillis: Long=15000,
     private val exaFetcher: ExaPageFetcher?=null,
     private val exaCachedFetcher: ExaPageFetcher?=null,
+    private val googlePlaySource: GooglePlayReviewSource?=null,
     private val reserveExa: ()->String = { throw ApiError(503,"exa_budget_unavailable","Live retrieval accounting is unavailable. Try CSV upload or paste.") },
     private val reconcileExa: (String,Double)->Unit = { _,_ -> }
 ) {
@@ -100,6 +101,7 @@ internal class ReviewScraper(
         val activeCall=AtomicReference<Call?>(null)
         val task=try { ScrapeRuntime.jobs.submit<Dataset> {
             var finalUrl=canonical
+            val requestedGooglePlay=try { GooglePlayScraper.canonicalUrl(canonical) } catch(_: ApiError) { null }
             fun fromProvider(provider: ExaPageFetcher, cached: Boolean): Dataset {
                 checkActive(deadline,cancelled)
                 if(PublicPageFetcher.remaining(deadline)<TimeUnit.SECONDS.toNanos(2)) throw timeout()
@@ -136,12 +138,33 @@ internal class ReviewScraper(
                 if(!visited.add(finalUrl)) throw ApiError(422,"scrape_redirect_loop","The source redirected in a loop. Try a direct review-page URL, CSV upload, or paste.")
                 redirects++
             }
+            val googlePlayUrl=try { GooglePlayScraper.canonicalUrl(finalUrl) } catch(_: ApiError) { null }
+            if(googlePlaySource!=null && requestedGooglePlay!=null && googlePlayUrl!=requestedGooglePlay)
+                throw ApiError(422,"google_play_source_mismatch","The app page redirected to a different source. No reviews were imported; use a direct Google Play app URL.")
             if(page.status in 300..399) throw ApiError(422,"scrape_redirect","The source returned an unsupported redirect response. Try CSV upload or paste.")
             if(page.status==401 || page.status==403 || page.status==429) throw ApiError(422,"scrape_blocked","This source blocked, requires access, or rate-limited the request. Reviq cannot bypass verification or access controls. Try CSV upload or paste.")
             if(page.status==404) throw ApiError(422,"scrape_not_found","The source page was not found. Check the URL, or use CSV upload or paste.")
             if(page.status!=200) throw ApiError(422,"scrape_source_error","The review source is unavailable (HTTP ${page.status}). Try CSV upload or paste.")
             if(!PublicPageFetcher.htmlType(page.contentType)) throw ApiError(422,"scrape_parse_failure","The source did not return a supported HTML page. Try CSV upload or paste.")
             val captured=Instant.now().toString()
+            if(googlePlaySource!=null && googlePlayUrl!=null) {
+                val entity=GooglePlayScraper.verifiedEntityName(page.body,googlePlayUrl)
+                val collection=googlePlaySource.collect(googlePlayUrl,deadline,cancelled,activeCall)
+                checkActive(deadline,cancelled)
+                if(collection.rows.isEmpty()) throw ApiError(422,"google_play_no_reviews","Google Play returned no written reviews for the English/US selection. Try CSV upload or paste.")
+                val pages=mapOf<String,Any?>("attempted" to 1+collection.batches,"fetched" to 1+collection.batches,"parsed" to 1+collection.batches,
+                    "review_batches" to collection.batches,"requested_reviews" to 100) + if(redirects>0) mapOf("redirects" to redirects) else emptyMap()
+                val completion=when(collection.stoppingReason) {
+                    "google_play_source_exhausted" -> "Google Play returned ${collection.rows.size} review records and no further page for this selection; fewer than 100 may be available."
+                    "google_play_target_reached" -> "The requested limit of 100 review records was reached. More reviews may be available."
+                    else -> "Collection stopped at the review-page limit before reaching 100 records. More reviews may be available."
+                }
+                val warnings=listOf(completion) + if(collection.duplicateIds>0) listOf("${collection.duplicateIds} repeated source review IDs across pages were ignored.") else emptyList()
+                val result=Normalize.scraped(entity,collection.rows,googlePlayUrl,Instant.now().toString(),"Google Play",warnings,pages,collection.stoppingReason,
+                    "Requested up to 100 written Google Play reviews, newest first, using English/US selection. ${collection.batches} review batches were retrieved. Ratings without written reviews are not imported. This selection does not establish complete worldwide review coverage; the total unseen review count is unknown.")
+                checkActive(deadline,cancelled)
+                return@submit result
+            }
             val parsed=ReviewPageParser.parse(page.body,finalUrl)
             checkActive(deadline,cancelled)
             val normalized=Normalize.scraped(parsed.entity,parsed.rows,finalUrl,captured,parsed.platform,parsed.warnings)
@@ -149,6 +172,10 @@ internal class ReviewScraper(
             checkActive(deadline,cancelled)
               dataset
             } catch(e: ApiError) {
+                // A paginated Play import must never silently become a three-card provider sample,
+                // including when the initial metadata page is blocked or malformed.
+                val finalGooglePlay=try { GooglePlayScraper.canonicalUrl(finalUrl) } catch(_: ApiError) { null }
+                if(googlePlaySource!=null && (requestedGooglePlay!=null || finalGooglePlay!=null)) throw e
                 // Only retrieval/markup failures qualify. Bad destinations, ambiguous entities,
                 // cancellation, redirects and deadlines never turn into paid provider requests.
                 if(exaFetcher==null || e.code !in setOf("scrape_blocked","scrape_no_reviews","scrape_parse_failure","scrape_body_limit","scrape_encoding")) throw e
@@ -246,12 +273,33 @@ internal class GooglePlayScraper(private val fetcher: PageFetcher=PublicPageFetc
             if(b[0]==63 && b[1]==255 && (b[2] and 240)==0) return false // documentation
             return true
         }
-        fun parse(html: String, canonical: String): Pair<String,List<Map<String,String>>> {
+        fun entityName(html: String, canonical: String): String {
             val doc=Jsoup.parse(html,canonical)
-            val name=doc.select("script[type=application/ld+json]").firstNotNullOfOrNull { script ->
+            return doc.select("script[type=application/ld+json]").firstNotNullOfOrNull { script ->
                 try { val json=mapper.readTree(script.data()); if(json.path("@type").asText()=="SoftwareApplication") json.path("name").asText().takeIf { it.isNotBlank() } else null } catch(_: Exception) { null }
             } ?: doc.selectFirst("h1")?.text()?.takeIf { it.isNotBlank() }
                 ?: throw ApiError(422,"scrape_parse_failure","The app name could not be verified from this page. Try CSV upload or paste.")
+        }
+        fun verifiedEntityName(html: String, canonical: String): String {
+            fun invalid(): Nothing=throw ApiError(422,"google_play_identity","The Google Play app identity could not be verified. No reviews were imported. Try CSV upload or paste.")
+            val expected=canonicalUrl(canonical)
+            val appId=expected.toHttpUrlOrNull()?.queryParameter("id") ?: invalid()
+            val doc=Jsoup.parse(html,expected)
+            val canonicalLinks=doc.select("link[rel=canonical]").map { it.attr("href") }
+            if(canonicalLinks.size!=1 || try { canonicalUrl(canonicalLinks.single())!=expected } catch(_: ApiError) { true }) invalid()
+            val apps=doc.select("script[type=application/ld+json]").mapNotNull { script ->
+                try { mapper.readTree(script.data())?.takeIf { it.path("@type").asText()=="SoftwareApplication" } } catch(_: Exception) { null }
+            }
+            if(apps.size!=1) invalid()
+            val app=apps.single()
+            val target=app.path("url").takeIf { it.isTextual }?.asText()?.toHttpUrlOrNull() ?: invalid()
+            if(target.scheme!="https" || target.host!="play.google.com" || target.port!=443 || target.username.isNotEmpty() || target.password.isNotEmpty() ||
+                (target.encodedPath!="/store/apps/details" && !target.encodedPath.startsWith("/store/apps/details/")) || target.queryParameterValues("id")!=listOf(appId)) invalid()
+            return app.path("name").takeIf { it.isTextual }?.asText()?.takeIf { it.isNotBlank() && it.codePointCount(0,it.length)<=160 && it.none(Char::isISOControl) } ?: invalid()
+        }
+        fun parse(html: String, canonical: String): Pair<String,List<Map<String,String>>> {
+            val name=entityName(html,canonical)
+            val doc=Jsoup.parse(html,canonical)
             val dateFormat=DateTimeFormatter.ofPattern("MMMM d, uuuu",Locale.US).withResolverStyle(ResolverStyle.STRICT)
             val rows=doc.select("div.EGFGHd").map { card ->
                 val body=card.selectFirst(".h3YV2d")

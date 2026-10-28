@@ -1,0 +1,49 @@
+{
+  "run_at": "2026-10-28T02:36:55.969Z",
+  "base_url": "https://reviq.xyz",
+  "passed": true,
+  "url_import_requests": 1,
+  "model_calls": 0,
+  "seed_imports": 0,
+  "requested_reviews": 100,
+  "checks": [
+    "one fresh Google Play URL import with default target100 and no chat",
+    "actual accepted count and normalization limits reconcile with observed records",
+    "rating/date statistics and duplicate removal match the captured sample",
+    "metadata page and review batches match API and visible provenance",
+    "source exhaustion is scoped to the selected locale/order, not all ratings",
+    "first, middle and final review evidence matches original text",
+    "final review remains searchable and accessible after reload and on mobile",
+    "dataset, page counts and empty history persist after reload"
+  ],
+  "status": 200,
+  "duration_ms": 1020,
+  "entity": "OnePageCRM - Simple CRM System",
+  "platform": "Google Play",
+  "source_url": "https://play.google.com/store/apps/details?id=com.onepagecrm&hl=en&gl=US",
+  "retrieval_provider": "direct",
+  "retrieval_freshness": "live",
+  "captured_at": "2026-10-28T02:36:57.391742280Z",
+  "retrieved_at": "2026-10-28T02:36:57.391742280Z",
+  "review_count": 83,
+  "observed": 83,
+  "rejected": 0,
+  "duplicates": 0,
+  "excluded": 0,
+  "token_count": 7103,
+  "dated_review_count": 83,
+  "pages": {
+    "attempted": 3,
+    "fetched": 3,
+    "parsed": 3,
+    "review_batches": 2,
+    "requested_reviews": 100
+  },
+  "stopping_reason": "google_play_source_exhausted",
+  "scanned_total_known": false,
+  "evidence_review_ids": [
+    "R001",
+    "R042",
+    "R083"
+  ]
+}
