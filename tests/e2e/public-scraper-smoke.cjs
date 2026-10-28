@@ -77,9 +77,10 @@ const sources=process.env.REVIQ_SCRAPER_APPS==='whatsapp'?sourceList.slice(1):so
       assert.match(data.entity_name,new RegExp(name,'i'));
       assert.equal(data.source_url,`${url}&hl=en&gl=US`);
       assert.ok(data.captured_at&&Math.abs(Date.now()-Date.parse(data.captured_at))<120000,'Capture timestamp must reflect this fetch');
-      assert.ok(data.reviews.length>0&&data.reviews.length<=100);
+      assert.ok(data.reviews.length>0&&data.reviews.length<=200);
       const pages=data.summary.pages;
-      assert.equal(pages.requested_reviews,100);
+      assert.equal(pages.requested_reviews,200);
+      assert.equal(pages.batch_size,100);
       assert.ok(Number.isInteger(pages.review_batches)&&pages.review_batches>0);
       assert.ok(pages.attempted>=pages.fetched&&pages.fetched>=pages.parsed&&pages.parsed>0);
       assert.equal(pages.parsed,pages.review_batches+1,'Page count includes app metadata and parsed review batches');
@@ -89,7 +90,7 @@ const sources=process.env.REVIQ_SCRAPER_APPS==='whatsapp'?sourceList.slice(1):so
       assert.equal(await page.getByText('Synthetic sample for exploring Reviq.',{exact:false}).count(),0);
       assert.equal(state.history.length,0);
       await page.getByText('Provenance & coverage',{exact:true}).click();
-      for(const [label,key] of [['Pages attempted','attempted'],['Pages fetched','fetched'],['Pages parsed','parsed'],['Requested reviews','requested_reviews'],['Review batches','review_batches']]){
+      for(const [label,key] of [['Pages attempted','attempted'],['Pages fetched','fetched'],['Pages parsed','parsed'],['Requested reviews','requested_reviews'],['Review batches','review_batches'],['Batch size','batch_size']]){
         const value=page.getByText(label,{exact:true}).locator('..').locator('dd');
         assert.equal(await value.innerText(),String(pages[key]));
       }

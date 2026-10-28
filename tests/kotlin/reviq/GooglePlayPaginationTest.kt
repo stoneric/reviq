@@ -13,24 +13,28 @@ class GooglePlayPaginationTest {
     private fun rows(count: Int)= (1..count).map { mapOf("text" to "Complete synthetic review number $it.","rating" to "4","date" to "2026-10-20","source_url" to GooglePlayScraper.canonicalUrl(url)) }
     private fun scraper(source: GooglePlayReviewSource)=ReviewScraper(PageFetcher { _,_,_,_ -> FetchedPage(200,metadata) },googlePlaySource=source)
 
-    @Test fun `metadata without teaser reviews can import one hundred paginated records`() {
+    @Test fun `metadata without teaser reviews can import two hundred paginated records`() {
         val started=Instant.now()
         val data=scraper(GooglePlayReviewSource { target,_,_,_ ->
             assertEquals(GooglePlayScraper.canonicalUrl(url),target)
-            GooglePlayCollection(rows(100),2,"google_play_target_reached")
+            GooglePlayCollection(rows(200),2,"google_play_target_reached")
         }).scrape(url)
-        assertEquals(100,data.reviews.size); assertEquals(100,data.summary.observed)
-        assertEquals("R100",data.reviews.last().id)
-        assertEquals("Complete synthetic review number 100.",data.reviews.last().text)
+        assertEquals(200,data.reviews.size); assertEquals(200,data.summary.observed)
+        assertEquals("R200",data.reviews.last().id)
+        assertEquals("Complete synthetic review number 200.",data.reviews.last().text)
         assertEquals("Fixture App",data.entity_name); assertEquals("Google Play",data.platform)
         assertEquals("direct",data.retrieval_provider); assertEquals("live",data.retrieval_freshness)
         assertFalse(Instant.parse(data.captured_at).isBefore(started))
         assertEquals(3,data.summary.pages["attempted"]); assertEquals(3,data.summary.pages["fetched"]); assertEquals(3,data.summary.pages["parsed"])
-        assertEquals(2,data.summary.pages["review_batches"]); assertEquals(100,data.summary.pages["requested_reviews"])
+        assertEquals(2,data.summary.pages["review_batches"]); assertEquals(200,data.summary.pages["requested_reviews"]); assertEquals(100,data.summary.pages["batch_size"])
         assertEquals("google_play_target_reached",data.summary.stopping_reason)
         assertTrue(data.summary.warnings.any { it.contains("newest first") && it.contains("English/US") })
         assertFalse(data.summary.warnings.any { it.contains("No review pagination") })
         assertFalse(data.summary.scanned_total_known)
+        assertEquals(0,data.summary.excluded)
+        val input=Analyst().input(data,emptyList(),"What does review R200 say?")
+        assertTrue(input.contains("Complete synthetic review number 200."))
+        assertTrue(Tokens.count(input)+Tokens.count(SYSTEM_PROMPT)+128<=30000)
     }
 
     @Test fun `exhaustion below requested count is explicit and source overlap is disclosed`() {
@@ -52,7 +56,7 @@ class GooglePlayPaginationTest {
     @Test fun `pagination uses original absolute deadline and cancellation`() {
         val source=GooglePlayReviewSource { _,end,_,_ ->
             assertTrue(end>System.nanoTime()); Thread.sleep(5000)
-            GooglePlayCollection(rows(100),2,"google_play_target_reached")
+            GooglePlayCollection(rows(200),2,"google_play_target_reached")
         }
         val slow=ReviewScraper(PageFetcher { _,_,_,_ -> FetchedPage(200,metadata) },timeoutMillis=100,googlePlaySource=source)
         val started=System.nanoTime()
@@ -62,15 +66,15 @@ class GooglePlayPaginationTest {
     }
 
     @Test fun `normalization exclusions remain honest after collection reaches the target`() {
-        val records=rows(100).toMutableList()
+        val records=rows(200).toMutableList()
         records[0]=records[0]+("text" to "oversized synthetic evidence ".repeat(10000))
         records[1]=records[2]
         val data=scraper(GooglePlayReviewSource { _,_,_,_ -> GooglePlayCollection(records,2,"google_play_target_reached") }).scrape(url)
-        assertEquals(100,data.summary.observed); assertEquals(98,data.reviews.size)
+        assertEquals(200,data.summary.observed); assertEquals(198,data.reviews.size)
         assertEquals(1,data.summary.excluded); assertEquals(1,data.summary.duplicates)
         assertEquals("token_limit",data.summary.stopping_reason)
         assertEquals(data.summary.observed,data.summary.accepted+data.summary.rejected+data.summary.duplicates+data.summary.excluded)
-        assertTrue(data.summary.warnings.any { it.contains("100 review records") })
+        assertTrue(data.summary.warnings.any { it.contains("200 review records") })
     }
 
     @Test fun `app metadata must bind the requested package and cannot be a challenge heading`() {
@@ -120,12 +124,12 @@ class GooglePlayPaginationTest {
     fun `real paginated OnePageCRM and Spotify imports exceed the preview`() {
         for(id in listOf("com.onepagecrm","com.spotify.music")) {
             val data=ReviewScraper(googlePlaySource=GooglePlayReviews).scrape("https://play.google.com/store/apps/details?id=$id")
-            assertTrue(data.reviews.size in 4..100)
-            assertEquals(100,data.summary.pages["requested_reviews"])
-            assertTrue((data.summary.pages["review_batches"] as Int)>=2)
+            assertTrue(data.reviews.size in 4..200)
+            assertEquals(200,data.summary.pages["requested_reviews"]); assertEquals(100,data.summary.pages["batch_size"])
+            assertTrue((data.summary.pages["review_batches"] as Int)>=1)
             assertTrue(data.summary.stopping_reason in setOf("google_play_source_exhausted","google_play_target_reached","token_limit"))
             assertEquals(data.summary.observed,data.summary.accepted+data.summary.rejected+data.summary.duplicates+data.summary.excluded)
-            if(id=="com.spotify.music") assertEquals(100,data.summary.observed)
+            if(id=="com.spotify.music") { assertEquals(200,data.summary.observed); assertTrue(data.reviews.size>100) }
             println("Live paginated Google Play verified: $id, observed=${data.summary.observed}, accepted=${data.reviews.size}, batches=${data.summary.pages["review_batches"]}, stop=${data.summary.stopping_reason}")
         }
     }

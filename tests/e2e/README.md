@@ -19,7 +19,37 @@ Coverage: landing and mobile layout; demo import; supplied-sample summary; origi
 
 A pass in evidence-search mode does **not** constitute a live-model evaluation. Live OpenAI grounding, injection resistance, usage accounting, provider failure cancellation, and streamed-draft semantic accuracy must be evaluated separately with the configured model.
 
-## Google Play review batches
+## Google Play target 200, batches of 100
+
+On **2026-10-28 at 02:51 UTC**, both focused isolated browser checks passed with the current **200-review target and 100-review batch size**. Each flow made one direct, fresh URL import with no seed or chat requests. No Exa retrieval calls were made.
+
+| App | Observed | Accepted | Duplicate text removed | Review batches | Total pages | Stop reason |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| OnePageCRM | 83 | 83 | 0 | 1 | 2 | Source exhausted |
+| Spotify | 200 | 197 | 3 | 2 | 3 | Target reached |
+
+Neither flow rejected or excluded reviews by normalization limits. Page totals include one app metadata page plus the review batches. The target describes fetched written reviews; accepted counts can be lower after duplicate-text removal. The English/US newest-first selection remains a sample, and `scanned_total_known:false` avoids claiming coverage of every rating or locale. Reports: [`google-play-200-onepagecrm-browser-2026-10-28.json`](google-play-200-onepagecrm-browser-2026-10-28.json) and [`google-play-200-spotify-browser-2026-10-28.json`](google-play-200-spotify-browser-2026-10-28.json).
+
+Both deployed HTTPS checks passed on **2026-10-28** with the same counts: OnePageCRM started at **02:53:03 UTC** and captured at **02:53:04 UTC**; Spotify started at **02:53:13 UTC** and captured at **02:53:14 UTC**. Capabilities, visible target/batch provenance, exact first/middle/final evidence, final-review search, reload and mobile layout all passed. Together the checks made exactly two imports, no seeds and no chat requests. Hosted reports: [`google-play-200-onepagecrm-hosted-2026-10-28.json`](google-play-200-onepagecrm-hosted-2026-10-28.json) and [`google-play-200-spotify-hosted-2026-10-28.json`](google-play-200-spotify-hosted-2026-10-28.json).
+
+```sh
+NODE_PATH=/tmp/reviq-browser-tests/node_modules \
+  REVIQ_BASE_URL=http://127.0.0.1:8089 \
+  node tests/e2e/google-play-reviews-smoke.cjs
+
+NODE_PATH=/tmp/reviq-browser-tests/node_modules \
+  REVIQ_BASE_URL=http://127.0.0.1:8089 \
+  REVIQ_GOOGLE_PLAY_URL='https://play.google.com/store/apps/details?id=com.spotify.music' \
+  REVIQ_EXPECT_ENTITY=Spotify \
+  REVIQ_EXPECT_REVIEW_COUNT=197 \
+  node tests/e2e/google-play-reviews-smoke.cjs
+```
+
+`google-play-reviews-smoke.cjs` makes exactly one fresh Google Play import, with no seed or chat requests. It checks capabilities and dataset metadata for target200/batch100, actual accepted/observed counts, count/token limits, normalized-text uniqueness, rating/date statistics, visible page/batch provenance, exact first/middle/final evidence, final-review search, reload, and mobile layout. It removes only its own session dataset afterward. Review text and authors remain in memory; reports contain metadata and counts only. Artifacts default to `/tmp/reviq-google-play-reviews`; use `REVIQ_E2E_ARTIFACTS` to keep separate runs. Use the HTTPS base URL only for a coordinated production check.
+
+Defaults match OnePageCRM: 83 accepted/observed, one review batch, two total pages, and `google_play_source_exhausted`. Set `REVIQ_GOOGLE_PLAY_URL` and `REVIQ_EXPECT_ENTITY` to test another app. Other apps default to 200 observed, two batches, three total pages, and `google_play_target_reached`; set `REVIQ_EXPECT_REVIEW_COUNT` to require a known accepted count. Override `REVIQ_EXPECT_OBSERVED_COUNT`, `REVIQ_EXPECT_REVIEW_BATCHES`, `REVIQ_EXPECT_PAGES`, or `REVIQ_EXPECT_STOPPING_REASON` only when source observations justify a different expectation. The summary must always reconcile observed, accepted, rejected, duplicate and excluded counts.
+
+## Historical Google Play target 100, batches of 50
 
 On **2026-10-28 at 02:32 UTC**, the isolated OnePageCRM browser check passed with **100 requested and 83 accepted written reviews**. Google Play exhausted the English/US, newest-first selection after two review batches; metadata plus those batches produced three attempted, fetched, and parsed pages. No review was rejected, deduplicated, or excluded by normalization. The result is `google_play_source_exhausted` with `scanned_total_known:false`: it does not claim that the selected written-review stream covers every rating or locale. See [`google-play-paging-browser-2026-10-28.json`](google-play-paging-browser-2026-10-28.json).
 
@@ -27,15 +57,7 @@ The deployed HTTPS check passed on **2026-10-28 at 02:36 UTC**, again requesting
 
 The same build passed **14/14** browser regressions in evidence mode and **31/31** URL/cache security cases: [`results-google-play-paging-2026-10-28.json`](results-google-play-paging-2026-10-28.json) and [`scraper-security-google-play-paging-2026-10-28.json`](scraper-security-google-play-paging-2026-10-28.json). No Exa retrieval checks or OpenAI calls were run for this verification.
 
-```sh
-NODE_PATH=/tmp/reviq-browser-tests/node_modules \
-  REVIQ_BASE_URL=http://127.0.0.1:8089 \
-  node tests/e2e/google-play-reviews-smoke.cjs
-```
-
-`google-play-reviews-smoke.cjs` makes exactly one fresh import of `com.onepagecrm`, with no seed or chat requests. It checks the default target of 100, actual accepted/observed counts, count/token limits, normalized-text uniqueness, rating/date statistics, requested reviews and batch/page counters in the UI, exact first/middle/final evidence, final-review search, reload, and mobile layout. It removes only its own session dataset afterward. Review text and authors remain in memory; reports contain metadata and counts only. The default artifact directory is `/tmp/reviq-google-play-reviews`, configurable with `REVIQ_E2E_ARTIFACTS`. Use the HTTPS base URL only for a coordinated production check.
-
-Defaults deliberately match the verified current source: 83 accepted/observed, two batches, three pages, and `google_play_source_exhausted`. If the live source changes, explicitly set `REVIQ_EXPECT_REVIEW_COUNT`, `REVIQ_EXPECT_OBSERVED_COUNT`, `REVIQ_EXPECT_REVIEW_BATCHES`, `REVIQ_EXPECT_PAGES`, and/or `REVIQ_EXPECT_STOPPING_REASON` to the expected contract. A source supplying 100 accepted reviews should assert 100 and `google_play_target_reached`; do not treat an unexplained shortfall as success. Accepted counts may be below fetched counts when identical text or normalization limits remove records, and the summary must reconcile that difference.
+These historical reports used a 100-review target and 50-review batches. The current script defaults and usage are documented above; the original report files remain unchanged.
 
 ## Explicit Exa cached retrieval
 

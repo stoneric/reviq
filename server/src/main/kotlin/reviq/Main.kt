@@ -51,7 +51,7 @@ fun main() {
         } catch(_: Exception) { error(ctx,ApiError(503,"database_unavailable","Review storage is temporarily unavailable. Please try again.")) }
     },false)
     router.get("/api/session").blockingHandler { ctx -> handle(ctx) {
-        val data=store.dataset(session(ctx)); json(ctx,mapOf("dataset" to data,"history" to if(data==null) emptyList() else store.history(session(ctx),data.id),"capabilities" to mapOf("ai_enabled" to analyst.enabled,"chat_mode" to analyst.mode,"live_scraping" to true,"exa_enabled" to exa.enabled,"supported_platforms" to listOf("Google Play","Trustpilot","Other public review sites"),"supported_url_example" to "https://www.trustpilot.com/review/allenbrothers.com","max_reviews" to 200,"retention_hours" to 24,"prompt_version" to PROMPT_VERSION,"model" to if(analyst.enabled) analyst.model else null)))
+        val data=store.dataset(session(ctx)); json(ctx,mapOf("dataset" to data,"history" to if(data==null) emptyList() else store.history(session(ctx),data.id),"capabilities" to mapOf("ai_enabled" to analyst.enabled,"chat_mode" to analyst.mode,"live_scraping" to true,"exa_enabled" to exa.enabled,"supported_platforms" to listOf("Google Play","Trustpilot","Other public review sites"),"supported_url_example" to "https://www.trustpilot.com/review/allenbrothers.com","max_reviews" to 200,"google_play_max_reviews" to GooglePlayReviews.TARGET,"google_play_batch_size" to GooglePlayReviews.BATCH_SIZE,"retention_hours" to 24,"prompt_version" to PROMPT_VERSION,"model" to if(analyst.enabled) analyst.model else null)))
     } }
     router.get("/api/dataset").blockingHandler { ctx -> handle(ctx) { json(ctx,mapOf("dataset" to store.dataset(session(ctx)))) } }
     router.post("/api/ingest").blockingHandler({ ctx -> handle(ctx) {

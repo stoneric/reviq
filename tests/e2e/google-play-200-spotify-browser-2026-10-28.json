@@ -1,0 +1,53 @@
+{
+  "run_at": "2026-10-28T02:51:52.714Z",
+  "base_url": "http://127.0.0.1:8089",
+  "passed": true,
+  "url_import_requests": 1,
+  "model_calls": 0,
+  "seed_imports": 0,
+  "expected_requested_reviews": 200,
+  "checks": [
+    "one fresh Google Play URL import with target200 and batch size100, no chat",
+    "actual accepted count and normalization limits reconcile with observed records",
+    "rating/date statistics and duplicate removal match the captured sample",
+    "metadata page and review batches match API and visible provenance",
+    "stop reason applies to the selected locale/order, not all ratings",
+    "first, middle and final review evidence matches original text",
+    "final review remains searchable and accessible after reload and on mobile",
+    "dataset, page counts and empty history persist after reload"
+  ],
+  "status": 200,
+  "duration_ms": 506,
+  "entity": "Spotify: Music and Podcasts",
+  "platform": "Google Play",
+  "source_url": "https://play.google.com/store/apps/details?id=com.spotify.music&hl=en&gl=US",
+  "retrieval_provider": "direct",
+  "retrieval_freshness": "live",
+  "captured_at": "2026-10-28T02:51:53.285488406Z",
+  "retrieved_at": "2026-10-28T02:51:53.285488406Z",
+  "requested_reviews": 200,
+  "batch_size": 100,
+  "review_count": 197,
+  "accepted": 197,
+  "observed": 200,
+  "rejected": 0,
+  "duplicates": 3,
+  "excluded": 0,
+  "token_count": 15372,
+  "dated_review_count": 197,
+  "pages": {
+    "attempted": 3,
+    "fetched": 3,
+    "parsed": 3,
+    "review_batches": 2,
+    "requested_reviews": 200,
+    "batch_size": 100
+  },
+  "stopping_reason": "google_play_target_reached",
+  "scanned_total_known": false,
+  "evidence_review_ids": [
+    "R001",
+    "R099",
+    "R197"
+  ]
+}

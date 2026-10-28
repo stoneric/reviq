@@ -34,8 +34,8 @@ internal fun interface GooglePlayBatchFetcher {
 internal object GooglePlayReviews: GooglePlayReviewSource {
     private const val ENDPOINT="https://play.google.com/_/PlayStoreUi/data/batchexecute?hl=en&gl=US"
     private const val RPC="oCPfdb"
-    private const val TARGET=100
-    private const val BATCH_SIZE=50
+    internal const val TARGET=200
+    internal const val BATCH_SIZE=100
     private const val MAX_BATCHES=5
     private const val MAX_BYTES=2*1024*1024
     private const val MAX_TOKEN_LENGTH=4096

@@ -1,3 +1,24 @@
+# Reviq 1.3.1 — 200-review Google Play limit
+
+Release date: 28 October 2026. Live application: https://reviq.xyz/.
+
+Fresh Google Play imports now request up to **200 review records in batches of 100**, increased from 100 records in batches of 50. The interface reads the collection settings from the API, and provenance shows both the requested limit and batch size. Earlier datasets retain the settings recorded when they were imported; re-import a URL to use the new limit.
+
+The existing maximum of 200 admitted reviews and 24,000 dataset tokens remains in force. The collector stops on source exhaustion, the record target or its page limit. Duplicate text and invalid or over-budget records remain explicitly counted, so the number accepted can be lower than the number fetched. The 15-second deadline, five-batch cap, cumulative 2 MiB response limit and atomic failure behavior are unchanged.
+
+## Implementation and validation
+
+- Centralized the target and batch size for the collector, API capabilities and dataset provenance, then updated the interface and active browser checks.
+- Expanded tests for two 100-record batches, source exhaustion after one batch, overlapping source IDs, remaining-target requests, oversized responses, and admission of R200 into the analysis input.
+- All **108 backend tests passed with no skips**, including actual PostgreSQL and live Google Play checks. The frontend build passed.
+- The live backend check collected **200 Spotify records in two batches**, accepting **197** after removing three repeated texts. OnePageCRM still supplied **83** available written reviews in this English/US selection, now in one batch; all 83 were accepted.
+
+The two focused isolated browser checks passed with those exact counts. They verified API settings, visible batch size and requested count, source evidence through the final accepted review, reload and mobile layout. Each flow used one URL import and no model calls; broader browser/security results from v1.3.0 remain historical.
+
+The final hosted checks passed at **02:53 UTC** with exactly two imports and zero chat requests: OnePageCRM 83 fetched/83 accepted, Spotify 200 fetched/197 accepted. Both reported target 200 and batch size 100; exact evidence, reload and mobile access passed. Reports: `tests/e2e/google-play-200-onepagecrm-hosted-2026-10-28.json` and `tests/e2e/google-play-200-spotify-hosted-2026-10-28.json`.
+
+---
+
 # Reviq 1.3.0 — Google Play review pagination
 
 Release date: 28 October 2026. Live application: https://reviq.xyz/.

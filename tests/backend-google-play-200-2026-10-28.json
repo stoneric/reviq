@@ -1,0 +1,75 @@
+{
+  "run_at": "2026-10-28T02:51:06.109946+00:00",
+  "mode": "Actual isolated PostgreSQL and live Google Play imports; 200-record target and 100-record batch contract tests; synthetic Exa contracts",
+  "suites": [
+    {
+      "name": "reviq.DomainTest",
+      "tests": 19,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "reviq.ExaContentsTest",
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "reviq.ExaFallbackTest",
+      "tests": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "reviq.GooglePlayPaginationTest",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "reviq.GooglePlayReviewsTest",
+      "tests": 16,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "reviq.PublicUrlNetworkTest",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "reviq.ReviewPageParserTest",
+      "tests": 16,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "reviq.ScraperTest",
+      "tests": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "reviq.StoreTest",
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ],
+  "totals": {
+    "tests": 108,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  }
+}

@@ -34,7 +34,7 @@ class GooglePlayReviewsTest {
 
     @Test fun `request serializes strict app identity fixed sort and opaque continuation without injection`() {
         val token = "opaque\"\\cursor+/%=&?https://127.0.0.1/"
-        val body = GooglePlayReviews.requestBody("com.onepagecrm", 50, token)
+        val body = GooglePlayReviews.requestBody("com.onepagecrm", 100, token)
         val outer = mapper.readTree(URLDecoder.decode(body.substringAfter("f.req=").substringBefore('&'), StandardCharsets.UTF_8))
         val rpc = outer[0][0]
         assertEquals("oCPfdb", rpc[0].asText())
@@ -42,14 +42,14 @@ class GooglePlayReviewsTest {
         assertEquals("com.onepagecrm", request[2][0].asText())
         assertEquals(7, request[2][1].asInt())
         assertEquals(2, request[1][1].asInt(), "Reviews must use the declared newest-first ordering")
-        assertEquals(50, request[1][2][0].asInt())
+        assertEquals(100, request[1][2][0].asInt())
         assertEquals(token, request[1][2][2].asText(), "Cursor is encoded as data, never a URL or JSON fragment")
         for (id in listOf("com.onepagecrm&id=com.other", "com.onepagecrm\n", "../secret", "single")) {
-            assertThrows(ApiError::class.java) { GooglePlayReviews.requestBody(id, 50) }
+            assertThrows(ApiError::class.java) { GooglePlayReviews.requestBody(id, 100) }
         }
-        for (count in listOf(0, -1, 51, 1000)) assertThrows(ApiError::class.java) { GooglePlayReviews.requestBody("com.onepagecrm", count) }
-        assertThrows(ApiError::class.java) { GooglePlayReviews.requestBody("com.onepagecrm", 50, "cursor\nheader") }
-        assertThrows(ApiError::class.java) { GooglePlayReviews.requestBody("com.onepagecrm", 50, "x".repeat(100000)) }
+        for (count in listOf(0, -1, 101, 1000)) assertThrows(ApiError::class.java) { GooglePlayReviews.requestBody("com.onepagecrm", count) }
+        assertThrows(ApiError::class.java) { GooglePlayReviews.requestBody("com.onepagecrm", 100, "cursor\nheader") }
+        assertThrows(ApiError::class.java) { GooglePlayReviews.requestBody("com.onepagecrm", 100, "x".repeat(100000)) }
     }
 
     @Test fun `framed and unframed RPC retain exact Unicode text and source metadata without developer reply`() {
@@ -97,26 +97,58 @@ class GooglePlayReviewsTest {
         assertEquals("google_play_parse_failure", assertThrows(ApiError::class.java) { GooglePlayReviews.parseResponse(frame(listOf(review("", "Body"))), url) }.code)
     }
 
-    @Test fun `target stops after one hundred unique IDs and shares the absolute deadline across batches`() {
+    @Test fun `target stops after two hundred unique IDs and shares the absolute deadline across batches`() {
         val calls = AtomicInteger(); val end = deadline(); val cursors = mutableListOf<String?>()
         val result = collect(GooglePlayBatchFetcher { app, count, token, suppliedEnd, _, _, remainingBytes ->
-            val call = calls.incrementAndGet(); assertEquals("com.onepagecrm", app); assertEquals(50, count)
+            val call = calls.incrementAndGet(); assertEquals("com.onepagecrm", app); assertEquals(100, count)
             assertEquals(end, suppliedEnd); assertTrue(remainingBytes in 1..(2 * 1024 * 1024)); cursors += token
-            frame((1..50).map { review("id-${(call - 1) * 50 + it}") }, if (call == 1) "next-page" else "unused-third-page")
+            frame((1..100).map { review("id-${(call - 1) * 100 + it}") }, if (call == 1) "next-page" else "unused-third-page")
         }, end)
         assertEquals(2, calls.get()); assertEquals(listOf(null, "next-page"), cursors)
-        assertEquals(100, result.rows.size); assertEquals(2, result.batches)
+        assertEquals(200, result.rows.size); assertEquals(2, result.batches)
         assertEquals("google_play_target_reached", result.stoppingReason); assertEquals(0, result.duplicateIds)
     }
 
-    @Test fun `source exhaustion returns available eighty three reviews without inventing the requested hundred`() {
+    @Test fun `source exhaustion returns available eighty three reviews without inventing the requested two hundred`() {
         val calls = AtomicInteger()
-        val result = collect(GooglePlayBatchFetcher { _, _, _, _, _, _, _ ->
-            if (calls.incrementAndGet() == 1) frame((1..50).map { review("id-$it") }, "next")
-            else frame((51..83).map { review("id-$it") })
+        val result = collect(GooglePlayBatchFetcher { _, count, _, _, _, _, _ ->
+            calls.incrementAndGet(); assertEquals(100, count)
+            frame((1..83).map { review("id-$it") })
         })
-        assertEquals(83, result.rows.size); assertEquals(2, result.batches)
+        assertEquals(83, result.rows.size); assertEquals(1, result.batches); assertEquals(1, calls.get())
         assertEquals("google_play_source_exhausted", result.stoppingReason)
+    }
+
+    @Test fun `source ID overlaps request only the remaining unique review target`() {
+        val calls = AtomicInteger(); val requested = mutableListOf<Int>()
+        val result = collect(GooglePlayBatchFetcher { _, count, _, _, _, _, _ ->
+            requested += count
+            when(calls.incrementAndGet()) {
+                1 -> frame((1..100).map { review("id-$it") }, "second")
+                2 -> frame((91..190).map { review("id-$it") }, "third")
+                3 -> frame((191..200).map { review("id-$it") }, "unused-fourth")
+                else -> error("The target must stop further requests")
+            }
+        })
+        assertEquals(listOf(100, 100, 10), requested)
+        assertEquals(200, result.rows.size); assertEquals(3, result.batches); assertEquals(10, result.duplicateIds)
+        assertEquals("google_play_target_reached", result.stoppingReason)
+    }
+
+    @Test fun `oversized response cannot exceed either batch or remaining review limit`() {
+        for(oversizedFirstBatch in listOf(true, false)) {
+            val calls = AtomicInteger()
+            val error = assertThrows(ApiError::class.java) { collect(GooglePlayBatchFetcher { _, count, _, _, _, _, _ ->
+                when(calls.incrementAndGet()) {
+                    1 -> frame((1..(if(oversizedFirstBatch) 101 else 100)).map { review("id-$it") }, "second")
+                    2 -> frame((91..190).map { review("id-$it") }, "third")
+                    3 -> { assertEquals(10, count); frame((191..201).map { review("id-$it") }) }
+                    else -> error("A malformed response must stop collection")
+                }
+            }) }
+            assertEquals("google_play_parse_failure", error.code)
+            assertEquals(if(oversizedFirstBatch) 1 else 3, calls.get())
+        }
     }
 
     @Test fun `overlapping source IDs retain first complete version while distinct identical texts reach normalizer`() {
